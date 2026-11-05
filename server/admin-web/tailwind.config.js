@@ -50,10 +50,10 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+        sans: ['IBM Plex Sans', 'Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
         mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'Liberation Mono', 'monospace'],
-        // Display face for page/panel titles — the brand voice.
-        display: ['Bricolage Grotesque', 'Geist', 'ui-sans-serif', 'sans-serif'],
+        // Display face for login hero headline.
+        display: ['Bricolage Grotesque', 'IBM Plex Sans', 'Geist', 'ui-sans-serif', 'sans-serif'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],

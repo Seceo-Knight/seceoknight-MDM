@@ -5,8 +5,8 @@
 /* ============================================================================
    Design tokens. Values are space-separated RGB triplets so Tailwind can apply
    opacity modifiers via rgb(var(--x) / <alpha>). Light is the default; .dark
-   overrides. Palette: a calm near-neutral grey scale + a single refined indigo
-   accent (Linear/Vercel-grade restraint — no rainbow, no random gradients).
+   overrides. Palette: a calm near-neutral grey scale + SeceoKnight cyan accent
+   (#2DD4E8) — consistent with the SIEM product design language.
    ========================================================================== */
 :root {
   --bg: 248 249 251;
@@ -20,12 +20,12 @@
   --muted: 100 109 124;
   --faint: 148 156 168;
 
-  --accent: 79 70 229;
-  --accent-hover: 67 56 202;
+  --accent: 6 182 212;
+  --accent-hover: 8 145 178;
   --accent-fg: 255 255 255;
-  --accent-soft: 238 238 252;
-  --accent-300: 165 180 252;
-  --accent-950: 49 46 129;
+  --accent-soft: 207 250 254;
+  --accent-300: 103 232 249;
+  --accent-950: 8 51 68;
 
   --success: 5 150 105;       --success-soft: 220 245 233;
   --warn: 202 138 4;          --warn-soft: 252 244 222;
@@ -40,28 +40,30 @@
 }
 
 .dark {
-  --bg: 9 9 12;
-  --surface: 21 21 26;
-  --surface-2: 28 28 34;
-  --surface-3: 35 35 42;
-  --line: 38 38 46;
-  --line-strong: 55 55 65;
+  /* SeceoKnight navy — matches SIEM: #05080D bg, #0A0F17 surface */
+  --bg: 5 8 13;
+  --surface: 10 15 23;
+  --surface-2: 15 23 34;
+  --surface-3: 20 32 48;
+  --line: 30 45 65;
+  --line-strong: 42 60 83;
 
-  --fg: 244 245 247;
-  --muted: 158 165 178;
-  --faint: 110 116 128;
+  --fg: 231 237 245;
+  --muted: 163 177 196;
+  --faint: 100 118 140;
 
-  --accent: 129 140 248;
-  --accent-hover: 165 180 252;
-  --accent-fg: 17 18 28;
-  --accent-soft: 35 36 58;
-  --accent-300: 129 140 248;
-  --accent-950: 30 31 56;
+  /* SeceoKnight cyan accent — same value as SIEM: #2DD4E8 */
+  --accent: 45 212 232;
+  --accent-hover: 34 211 238;
+  --accent-fg: 5 8 13;
+  --accent-soft: 10 44 58;
+  --accent-300: 103 232 249;
+  --accent-950: 8 32 44;
 
-  --success: 52 211 153;      --success-soft: 19 48 41;
-  --warn: 251 191 36;         --warn-soft: 52 42 16;
-  --danger: 248 113 113;      --danger-soft: 56 26 28;
-  --info: 96 165 250;         --info-soft: 23 37 64;
+  --success: 52 211 153;      --success-soft: 14 48 38;
+  --warn: 251 191 36;         --warn-soft: 46 36 10;
+  --danger: 248 113 113;      --danger-soft: 50 20 22;
+  --info: 96 165 250;         --info-soft: 15 32 60;
 
   --danger-solid: 220 38 38;  --danger-solid-hover: 239 68 68;
 
@@ -120,15 +122,15 @@ html, body, #root { height: 100%; }
 .login-hero {
   --mx: 50%; --my: 30%;
   background:
-    radial-gradient(120% 120% at 15% 0%, #1a1b3a 0%, transparent 55%),
-    radial-gradient(120% 120% at 100% 100%, #0c2434 0%, transparent 50%),
-    linear-gradient(160deg, #07070d 0%, #0a0a16 50%, #060610 100%);
+    radial-gradient(120% 120% at 15% 0%, #052030 0%, transparent 55%),
+    radial-gradient(120% 120% at 100% 100%, #03111e 0%, transparent 50%),
+    linear-gradient(160deg, #030609 0%, #060c14 50%, #040810 100%);
 }
 /* Fine engineering grid, masked to fade toward the edges. */
 .login-hero__grid {
   background-image:
-    linear-gradient(rgba(148,163,255,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148,163,255,0.06) 1px, transparent 1px);
+    linear-gradient(rgba(45,212,232,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45,212,232,0.06) 1px, transparent 1px);
   background-size: 38px 38px;
   -webkit-mask-image: radial-gradient(120% 90% at 30% 25%, #000 35%, transparent 78%);
           mask-image: radial-gradient(120% 90% at 30% 25%, #000 35%, transparent 78%);
@@ -142,7 +144,7 @@ html, body, #root { height: 100%; }
   position: absolute; top: 0; left: 0;
   width: 560px; height: 560px; margin: -280px 0 0 -280px;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgba(129,140,248,0.22) 0%, rgba(99,102,241,0.10) 40%, transparent 70%);
+  background: radial-gradient(circle, rgba(45,212,232,0.18) 0%, rgba(14,165,233,0.08) 40%, transparent 70%);
   pointer-events: none; opacity: 0; transition: opacity 400ms ease;
   will-change: transform;
 }
@@ -153,9 +155,9 @@ html, body, #root { height: 100%; }
   opacity: 0.05; mix-blend-mode: overlay;
 }
 /* Gradient headline + animated underline word. */
-.login-hero__title { font-family: 'Bricolage Grotesque', 'Geist', sans-serif; }
+.login-hero__title { font-family: 'Bricolage Grotesque', 'IBM Plex Sans', 'Geist', sans-serif; }
 .login-hero__grad {
-  background: linear-gradient(100deg, #c7d2fe 0%, #818cf8 35%, #67e8f9 70%, #a5b4fc 100%);
+  background: linear-gradient(100deg, #67e8f9 0%, #2dd4e8 30%, #22d3ee 60%, #a5f3fc 100%);
   background-size: 220% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
@@ -190,7 +192,7 @@ html, body, #root { height: 100%; }
 .dark .app-aura {
   background:
     radial-gradient(58rem 40rem at 102% -8%, rgb(var(--accent) / 0.12), transparent 60%),
-    radial-gradient(48rem 38rem at -8% 4%, rgb(129 140 248 / 0.08), transparent 55%);
+    radial-gradient(48rem 38rem at -8% 4%, rgb(45 212 232 / 0.07), transparent 55%);
 }
 
 /* Fine engineering grid behind all app content — the login hero's language
@@ -206,30 +208,30 @@ html, body, #root { height: 100%; }
 }
 .dark .app-grid {
   background-image:
-    linear-gradient(rgb(148 163 255 / 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(148 163 255 / 0.045) 1px, transparent 1px);
+    linear-gradient(rgb(45 212 232 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(45 212 232 / 0.04) 1px, transparent 1px);
 }
 
 /* Brand-gradient primary CTA + table hover rail (used by Button variant
-   `primary` and `tbody.rail`). Fixed saturated indigo→violet in BOTH themes —
+   `primary` and `tbody.rail`). Fixed saturated cyan in BOTH themes —
    like .brand-tile — so the CTA reads identically everywhere. */
 .btn-brand {
-  background-image: linear-gradient(180deg, #6d70f6 0%, #4f46e5 100%);
-  color: #fff;
-  box-shadow: 0 8px 20px -10px rgb(99 102 241 / 0.7), 0 1px 2px rgb(0 0 0 / 0.08);
+  background-image: linear-gradient(180deg, #22d3ee 0%, #0891b2 100%);
+  color: #05080d;
+  box-shadow: 0 8px 20px -10px rgb(45 212 232 / 0.65), 0 1px 2px rgb(0 0 0 / 0.08);
 }
 .btn-brand:hover:not(:disabled) {
-  background-image: linear-gradient(180deg, #7d80ff 0%, #5a51f0 100%);
-  box-shadow: 0 10px 24px -10px rgb(99 102 241 / 0.85), 0 1px 2px rgb(0 0 0 / 0.08);
+  background-image: linear-gradient(180deg, #2dd4e8 0%, #0e7490 100%);
+  box-shadow: 0 10px 24px -10px rgb(45 212 232 / 0.80), 0 1px 2px rgb(0 0 0 / 0.08);
 }
 tbody.rail > tr { position: relative; }
 tbody.rail > tr:hover { box-shadow: inset 2px 0 0 rgb(var(--accent) / 0.65); }
 
-/* Shared brand-mark gradient (the "CS" tile) — identical across login + chrome. */
+/* Shared brand-mark gradient (the "SK" tile) — identical across login + chrome. */
 .brand-tile {
-  background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
-  color: #fff;
-  box-shadow: 0 6px 16px -6px rgb(99 102 241 / 0.55);
+  background-image: linear-gradient(135deg, #2dd4e8 0%, #0891b2 100%);
+  color: #05080d;
+  box-shadow: 0 6px 16px -6px rgb(45 212 232 / 0.55);
 }
 
 /* Per-route page entrance — one staggered settle on navigation. */

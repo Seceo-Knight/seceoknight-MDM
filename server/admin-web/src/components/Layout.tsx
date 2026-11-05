@@ -25,8 +25,8 @@ function Brand() {
 
 // Sleek, always-visible company bar — FIXED to the viewport bottom (stays put
 // on scroll), offset to clear the sidebar. Opaque (no backdrop-blur) so it never
-// re-rasterizes over scrolling content. Product lockup left, Virtual Galaxy
-// company logo (theme-aware) right.
+// re-rasterizes over scrolling content. Product lockup left, SeceoKnight
+// Technologies mark right.
 function AppFooter({ collapsed }: { collapsed: boolean }) {
   const year = new Date().getFullYear();
   return (
@@ -48,13 +48,11 @@ function AppFooter({ collapsed }: { collapsed: boolean }) {
           <span className="hidden sm:inline text-2xs font-medium uppercase tracking-[0.2em] text-faint">Mobile Device Management</span>
         </Link>
         {/* Company */}
-        <a href="https://vgipl.com" target="_blank" rel="noreferrer"
-           title="Virtual Galaxy Infotech Ltd"
-           className="group flex items-center gap-3 shrink-0">
-          <span className="hidden md:inline text-2xs text-faint whitespace-nowrap tabular-nums">© {year} · Powered by</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="hidden md:inline text-2xs text-faint whitespace-nowrap tabular-nums">© {year}</span>
           <span className="hidden md:block h-3.5 w-px bg-line" />
-          <CompanyLogo className="h-7 w-auto opacity-90 transition-all duration-200 group-hover:opacity-100 group-hover:-translate-y-px" />
-        </a>
+          <CompanyLogo className="opacity-80" />
+        </div>
       </div>
     </footer>
   );
@@ -108,7 +106,7 @@ function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }: { onNaviga
     <div className="flex h-full flex-col bg-surface">
       <div className={clsx('h-16 flex items-center border-b border-line', collapsed ? 'justify-center px-0' : 'px-5')}>
         {collapsed
-          ? <Link to="/" title="CyberSentinel — Mobile Device Management"><BrandIcon className="w-9 h-9" /></Link>
+          ? <Link to="/" title="SeceoKnight MDM — Mobile Device Management"><BrandIcon className="w-9 h-9" /></Link>
           : <Brand />}
       </div>
 

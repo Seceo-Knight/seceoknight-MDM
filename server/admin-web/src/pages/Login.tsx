@@ -62,9 +62,9 @@ export function Login() {
            className="login-hero hidden lg:flex flex-col justify-between p-12 xl:p-16 relative overflow-hidden text-white/90 select-none">
         {/* Drifting aurora fields (static now, for performance) */}
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-32 -left-24 w-[34rem] h-[34rem] rounded-full bg-indigo-500/30 blur-[120px] animate-aurora-a" />
-          <div className="absolute top-1/3 -right-24 w-[30rem] h-[30rem] rounded-full bg-cyan-400/20 blur-[120px] animate-aurora-b" />
-          <div className="absolute -bottom-40 left-1/4 w-[32rem] h-[32rem] rounded-full bg-violet-500/25 blur-[130px] animate-float" />
+          <div className="absolute -top-32 -left-24 w-[34rem] h-[34rem] rounded-full bg-cyan-500/20 blur-[120px] animate-aurora-a" />
+          <div className="absolute top-1/3 -right-24 w-[30rem] h-[30rem] rounded-full bg-cyan-400/15 blur-[120px] animate-aurora-b" />
+          <div className="absolute -bottom-40 left-1/4 w-[32rem] h-[32rem] rounded-full bg-sky-500/15 blur-[130px] animate-float" />
         </div>
         <div className="login-hero__grid pointer-events-none absolute inset-0" />
         {/* Pointer-following light */}
@@ -109,7 +109,7 @@ export function Login() {
                    className="login-rise flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3.5 py-2.5 backdrop-blur-sm
                               transition-colors hover:border-white/15 hover:bg-white/[0.06]"
                    style={{ animationDelay: `${320 + i * 90}ms` }}>
-                <span className="grid place-items-center w-8 h-8 rounded-lg bg-white/[0.06] text-indigo-300 ring-1 ring-white/10">
+                <span className="grid place-items-center w-8 h-8 rounded-lg bg-white/[0.06] text-cyan-300 ring-1 ring-white/10">
                   <s.icon size={15} />
                 </span>
                 <span className="text-sm text-white/75">{s.label}</span>
@@ -121,14 +121,11 @@ export function Login() {
 
         <div className="relative login-rise" style={{ animationDelay: '640ms' }}>
           <div className="flex items-center gap-2.5 text-2xs text-white/40">
-            <span className="uppercase tracking-[0.16em] text-white/30">Powered by</span>
-            <a href="https://vgipl.com" target="_blank" rel="noreferrer" className="opacity-90 hover:opacity-100 transition-opacity">
-              <CompanyLogo variant="white" className="h-10 w-auto" />
-            </a>
+            <CompanyLogo variant="white" />
           </div>
           <div className="mt-2 flex items-center gap-2 text-2xs text-white/30">
             <ShieldCheck size={13} className="text-emerald-400/70" />
-            © {new Date().getFullYear()} Virtual Galaxy Infotech Ltd · RBAC · zero-trust posture
+            © {new Date().getFullYear()} SeceoKnight Technologies · RBAC · zero-trust posture
           </div>
         </div>
       </div>
