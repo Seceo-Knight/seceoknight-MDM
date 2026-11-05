@@ -233,7 +233,7 @@ function ChannelForm({
                 <label key={ev.key} className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-line bg-surface-2 px-4 py-3 hover:border-accent/40 transition-colors">
                   <input
                     type="checkbox"
-                    checked={(form as Record<string, unknown>)[ev.key] as boolean ?? false}
+                    checked={!!(form as unknown as Record<string, unknown>)[ev.key]}
                     onChange={e => set({ [ev.key]: e.target.checked } as Partial<ChannelInput>)}
                     className="accent-accent w-4 h-4 mt-0.5 flex-shrink-0"
                   />
