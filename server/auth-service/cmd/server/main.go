@@ -139,6 +139,16 @@ func newApp(svc string, pg *sqlx.DB, rdb *redis.Client, issuer *auth.Issuer, ref
 	v1.Get("/sessions", middleware.JWTAuth(issuer), middleware.RequirePermission(authz.PermUserRead), authH.Sessions)
 	v1.Post("/sessions/:id/revoke", middleware.JWTAuth(issuer), middleware.RequirePermission(authz.PermUserManage), authH.RevokeSession)
 
+	// MFA — all routes require a valid JWT (the user must be logged in to manage
+	// their own MFA). No extra permission guard: any authenticated admin can
+	// enable/disable MFA on their own account.
+	mfa := v1.Group("/mfa", middleware.JWTAuth(issuer))
+	mfa.Get("/status", authH.MFAStatus)
+	mfa.Post("/setup", authH.SetupMFA)
+	mfa.Post("/confirm", authH.ConfirmMFA)
+	mfa.Delete("", authH.DisableMFA)
+	mfa.Post("/backup-codes", authH.RegenerateBackupCodes)
+
 	return app
 }
 

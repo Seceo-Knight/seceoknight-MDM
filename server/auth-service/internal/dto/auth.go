@@ -76,3 +76,41 @@ type SessionDTO struct {
 	IssuedAt   string `json:"issued_at"`   // also "last active" (advances each refresh)
 	ExpiresAt  string `json:"expires_at"`
 }
+
+// ---- MFA DTOs -------------------------------------------------------
+
+// MFARequiredResponse is returned by POST /login when the user has MFA enabled
+// and the request did not include an mfa_code. The client should show the TOTP
+// challenge screen and re-submit with the code.
+type MFARequiredResponse struct {
+	MFARequired bool   `json:"mfa_required"`
+}
+
+// SetupMFAResponse is returned by POST /mfa/setup. The client displays the QR
+// code (base64 PNG) and the plain-text secret (for manual entry). The user
+// must confirm with a valid TOTP code before MFA is activated.
+type SetupMFAResponse struct {
+	Secret   string `json:"secret"`    // base32 TOTP secret for manual entry
+	QRCode   string `json:"qr_code"`   // base64-encoded PNG of the QR code
+}
+
+// ConfirmMFARequest is sent by the client to activate MFA after scanning the QR.
+type ConfirmMFARequest struct {
+	Code string `json:"code"` // current TOTP code to verify setup succeeded
+}
+
+// MFAStatusResponse is returned by GET /mfa/status.
+type MFAStatusResponse struct {
+	Enabled bool `json:"enabled"`
+}
+
+// BackupCodesResponse is returned after enable or regenerate.
+type BackupCodesResponse struct {
+	Codes []string `json:"codes"` // plain-text codes — only shown once
+}
+
+// DisableMFARequest requires the current TOTP or a backup code to prevent
+// accidental/unauthorized disablement.
+type DisableMFARequest struct {
+	Code string `json:"code"` // TOTP code or backup code
+}

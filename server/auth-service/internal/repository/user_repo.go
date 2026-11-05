@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"strings"
@@ -9,9 +10,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/mdm/shared/models"
 )
+
+// MFAData holds the MFA columns for a user, returned by MFA-specific queries
+// to avoid adding pq.StringArray to the shared User model.
+type MFAData struct {
+	MFAEnabled   bool
+	MFASecret    *string
+	BackupCodes  []string // hashed backup codes
+}
 
 var ErrNotFound = errors.New("not found")
 var ErrEmailTaken = errors.New("email already in use")
@@ -150,4 +160,115 @@ func (r *UserRepo) UpdateEmail(ctx context.Context, id uuid.UUID, email string) 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ---- MFA methods -------------------------------------------------------
+
+// GetMFAData fetches the MFA columns for a user (mfa_enabled, mfa_secret,
+// mfa_backup_codes). Used during login and by the MFA setup/disable flows.
+func (r *UserRepo) GetMFAData(ctx context.Context, id uuid.UUID) (*MFAData, error) {
+	type row struct {
+		MFAEnabled  bool           `db:"mfa_enabled"`
+		MFASecret   *string        `db:"mfa_secret"`
+		BackupCodes pq.StringArray `db:"mfa_backup_codes"`
+	}
+	var rv row
+	err := r.db.GetContext(ctx, &rv,
+		`SELECT mfa_enabled, mfa_secret, mfa_backup_codes FROM users WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &MFAData{
+		MFAEnabled:  rv.MFAEnabled,
+		MFASecret:   rv.MFASecret,
+		BackupCodes: []string(rv.BackupCodes),
+	}, nil
+}
+
+// StoreMFASecret saves the TOTP secret during the setup flow (before the user
+// has confirmed it). mfa_enabled stays false until ConfirmMFA.
+func (r *UserRepo) StoreMFASecret(ctx context.Context, id uuid.UUID, secret string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET mfa_secret = $1 WHERE id = $2 AND deleted_at IS NULL`, secret, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// EnableMFA confirms the TOTP setup: sets mfa_enabled = true, stores the
+// secret (again, to be safe), and writes the hashed backup codes.
+func (r *UserRepo) EnableMFA(ctx context.Context, id uuid.UUID, secret string, backupCodes []string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET mfa_enabled = true, mfa_secret = $1, mfa_backup_codes = $2
+		 WHERE id = $3 AND deleted_at IS NULL`,
+		secret, pq.Array(backupCodes), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DisableMFA clears all MFA state for a user.
+func (r *UserRepo) DisableMFA(ctx context.Context, id uuid.UUID) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET mfa_enabled = false, mfa_secret = NULL, mfa_backup_codes = '{}'
+		 WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetBackupCodes replaces the backup codes for a user (called after regenerate).
+func (r *UserRepo) SetBackupCodes(ctx context.Context, id uuid.UUID, backupCodes []string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE users SET mfa_backup_codes = $1 WHERE id = $2 AND deleted_at IS NULL`,
+		pq.Array(backupCodes), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ConsumeBackupCode removes the matching hashed backup code atomically.
+// Returns ErrNotFound if the code doesn't match any stored code.
+// Uses constant-time comparison to avoid timing attacks.
+func (r *UserRepo) ConsumeBackupCode(ctx context.Context, id uuid.UUID, hashedCode string) error {
+	mfa, err := r.GetMFAData(ctx, id)
+	if err != nil {
+		return err
+	}
+	var remaining []string
+	found := false
+	for _, stored := range mfa.BackupCodes {
+		if !found && subtle.ConstantTimeCompare([]byte(stored), []byte(hashedCode)) == 1 {
+			found = true
+			// Skip (consume) this code — don't add to remaining.
+			continue
+		}
+		remaining = append(remaining, stored)
+	}
+	if !found {
+		return ErrNotFound
+	}
+	if remaining == nil {
+		remaining = []string{}
+	}
+	return r.SetBackupCodes(ctx, id, remaining)
 }

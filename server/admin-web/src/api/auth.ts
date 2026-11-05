@@ -11,8 +11,28 @@ export interface LoginResponse {
   user: AuthUserDTO;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  const r = await api.post<LoginResponse>('/api/v1/auth/login', { email, password });
+/** Returned when the server needs an MFA code before issuing tokens. */
+export interface MFARequiredResponse {
+  mfa_required: true;
+}
+
+export type LoginResult = LoginResponse | MFARequiredResponse;
+
+export function isMFARequired(r: LoginResult): r is MFARequiredResponse {
+  return 'mfa_required' in r && r.mfa_required === true;
+}
+
+/** First step: email + password only. Second step: include mfa_code. */
+export async function login(
+  email: string,
+  password: string,
+  mfa_code?: string,
+): Promise<LoginResult> {
+  const r = await api.post<LoginResult>('/api/v1/auth/login', {
+    email,
+    password,
+    ...(mfa_code ? { mfa_code } : {}),
+  });
   return r.data;
 }
 
@@ -93,5 +113,63 @@ export async function changePassword(old_password: string, new_password: string)
 // updateEmail changes the logged-in user's own email; returns the updated user.
 export async function updateEmail(email: string): Promise<TenantUser> {
   const r = await api.patch<TenantUser>('/api/v1/auth/me', { email });
+  return r.data;
+}
+
+// ---- MFA TOTP API -------------------------------------------------------
+
+export interface MFAStatus {
+  enabled: boolean;
+}
+
+export interface MFASetupResponse {
+  /** Base32 TOTP secret for manual entry into an authenticator app. */
+  secret: string;
+  /** data:image/png;base64,... QR code to scan. */
+  qr_code: string;
+}
+
+export interface BackupCodesResponse {
+  codes: string[];
+}
+
+/** Returns whether MFA is currently active for the logged-in user. */
+export async function mfaStatus(): Promise<MFAStatus> {
+  const r = await api.get<MFAStatus>('/api/v1/auth/mfa/status');
+  return r.data;
+}
+
+/**
+ * Initiates MFA setup: generates a TOTP secret and returns the QR code.
+ * MFA is NOT yet enabled — call confirmMFA with a valid code to activate.
+ */
+export async function setupMFA(): Promise<MFASetupResponse> {
+  const r = await api.post<MFASetupResponse>('/api/v1/auth/mfa/setup');
+  return r.data;
+}
+
+/**
+ * Confirms MFA setup by verifying the first TOTP code from the authenticator.
+ * On success, MFA is activated and the returned backup codes are shown once.
+ */
+export async function confirmMFA(code: string): Promise<BackupCodesResponse> {
+  const r = await api.post<BackupCodesResponse>('/api/v1/auth/mfa/confirm', { code });
+  return r.data;
+}
+
+/**
+ * Disables MFA. Requires the current TOTP code or a backup code to prevent
+ * accidental or unauthorised disablement.
+ */
+export async function disableMFA(code: string): Promise<void> {
+  await api.delete('/api/v1/auth/mfa', { data: { code } });
+}
+
+/**
+ * Regenerates all backup codes. Requires a live TOTP code for confirmation.
+ * The old backup codes are immediately invalidated.
+ */
+export async function regenerateBackupCodes(code: string): Promise<BackupCodesResponse> {
+  const r = await api.post<BackupCodesResponse>('/api/v1/auth/mfa/backup-codes', { code });
   return r.data;
 }

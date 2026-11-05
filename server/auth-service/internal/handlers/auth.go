@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -41,10 +42,15 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	pair, err := h.svc.Login(c.Context(), service.LoginInput{
 		Email:     req.Email,
 		Password:  req.Password,
+		MFACode:   req.MFACode,
 		UserAgent: c.Get("User-Agent"),
 		IP:        clientIP(c),
 	})
 	if err != nil {
+		// MFA required: not an error — tell the client to show the TOTP challenge.
+		if errors.Is(err, service.ErrMFARequired) {
+			return c.JSON(dto.MFARequiredResponse{MFARequired: true})
+		}
 		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -299,4 +305,65 @@ func roleOf(c *fiber.Ctx) string {
 		return ""
 	}
 	return claims.Role
+}
+
+// ---- MFA handlers -------------------------------------------------------
+
+// SetupMFA POST /mfa/setup — generates a TOTP secret + QR code for the caller.
+// MFA is NOT yet enabled until the user confirms with a valid code.
+func (h *AuthHandler) SetupMFA(c *fiber.Ctx) error {
+	result, err := h.svc.SetupMFA(c.Context(), userOf(c))
+	if err != nil {
+		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(dto.SetupMFAResponse{Secret: result.Secret, QRCode: result.QRCode})
+}
+
+// ConfirmMFA POST /mfa/confirm — activates MFA after the user proves their
+// authenticator app is configured correctly, returns single-use backup codes.
+func (h *AuthHandler) ConfirmMFA(c *fiber.Ctx) error {
+	var req dto.ConfirmMFARequest
+	if err := c.BodyParser(&req); err != nil || req.Code == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "code required"})
+	}
+	codes, err := h.svc.ConfirmMFA(c.Context(), userOf(c), req.Code)
+	if err != nil {
+		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(dto.BackupCodesResponse{Codes: codes})
+}
+
+// DisableMFA DELETE /mfa — disables MFA after verifying a TOTP or backup code.
+func (h *AuthHandler) DisableMFA(c *fiber.Ctx) error {
+	var req dto.DisableMFARequest
+	if err := c.BodyParser(&req); err != nil || req.Code == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "code required"})
+	}
+	if err := h.svc.DisableMFA(c.Context(), userOf(c), req.Code); err != nil {
+		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.SendStatus(204)
+}
+
+// RegenerateBackupCodes POST /mfa/backup-codes — replaces all backup codes.
+// Requires a live TOTP code in the request body.
+func (h *AuthHandler) RegenerateBackupCodes(c *fiber.Ctx) error {
+	var req dto.ConfirmMFARequest // reuse — same shape: just a "code" field
+	if err := c.BodyParser(&req); err != nil || req.Code == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "totp code required"})
+	}
+	codes, err := h.svc.RegenerateBackupCodes(c.Context(), userOf(c), req.Code)
+	if err != nil {
+		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(dto.BackupCodesResponse{Codes: codes})
+}
+
+// MFAStatus GET /mfa/status — returns current MFA state for the caller.
+func (h *AuthHandler) MFAStatus(c *fiber.Ctx) error {
+	enabled, err := h.svc.MFAStatus(c.Context(), userOf(c))
+	if err != nil {
+		return c.Status(apperr.HTTPStatus(err)).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(dto.MFAStatusResponse{Enabled: enabled})
 }

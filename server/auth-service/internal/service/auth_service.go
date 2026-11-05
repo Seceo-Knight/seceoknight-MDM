@@ -4,14 +4,20 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
+	qrcode "github.com/skip2/go-qrcode"
 
 	"github.com/mdm/auth-service/internal/repository"
 	"github.com/mdm/shared/auth"
@@ -43,9 +49,15 @@ const sessionDenyTTL = 2 * time.Hour
 type LoginInput struct {
 	Email     string
 	Password  string
+	MFACode   string
 	UserAgent string
 	IP        string
 }
+
+// ErrMFARequired is a sentinel returned by Login when the user has MFA enabled
+// but no TOTP code was supplied. The handler maps this to a 200 with
+// {"mfa_required": true} so the client can show the TOTP challenge screen.
+var ErrMFARequired = errors.New("mfa_required")
 
 type TokenPair struct {
 	Access  string
@@ -70,8 +82,39 @@ func (s *AuthService) Login(ctx context.Context, in LoginInput) (*TokenPair, err
 		})
 		return nil, apperr.New(apperr.CodeUnauthorized, "invalid credentials")
 	}
-	// MFA: not enforced here — but the column is wired through so a future
-	// `mfa_required` step can plug in here once an enrolment endpoint exists.
+
+	// ---- MFA enforcement ------------------------------------------------
+	if u.MFAEnabled {
+		if in.MFACode == "" {
+			// Step 1: password correct, MFA required — tell the client to ask
+			// for the TOTP code. This is NOT an auth failure.
+			return nil, ErrMFARequired
+		}
+		mfaData, err := s.users.GetMFAData(ctx, u.ID)
+		if err != nil {
+			return nil, apperr.Wrap(apperr.CodeInternal, "mfa data lookup", err)
+		}
+		if mfaData.MFASecret == nil {
+			return nil, apperr.New(apperr.CodeInternal, "mfa secret missing")
+		}
+		// Try TOTP first, then fall back to backup code.
+		valid := totp.Validate(in.MFACode, *mfaData.MFASecret)
+		if !valid {
+			// Try backup codes (8-char uppercase alphanumeric).
+			hashed := hashBackupCode(in.MFACode)
+			if err := s.users.ConsumeBackupCode(ctx, u.ID, hashed); err != nil {
+				s.auditUser(ctx, u.TenantID, u.ID, "user.mfa_failed", u.ID, map[string]any{
+					"email": u.Email, "ip": in.IP,
+				})
+				return nil, apperr.New(apperr.CodeUnauthorized, "invalid MFA code")
+			}
+			// Backup code consumed successfully.
+			s.auditUser(ctx, u.TenantID, u.ID, "user.mfa_backup_used", u.ID, map[string]any{
+				"email": u.Email, "ip": in.IP,
+			})
+		}
+	}
+	// ---- end MFA --------------------------------------------------------
 
 	// The session id (sid) embedded in the access token is the refresh token's
 	// own id, so a later force-logout of this session can reject the access
@@ -492,3 +535,148 @@ func (s *AuthService) UpdateEmail(ctx context.Context, userID uuid.UUID, email s
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// ---- MFA service methods -------------------------------------------------
+
+// MFASetupResult carries the QR code data-URI and the raw secret for the
+// setup screen. MFA is NOT yet enabled — the user must confirm with ConfirmMFA.
+type MFASetupResult struct {
+	Secret string
+	QRCode string // "data:image/png;base64,..." data-URI
+}
+
+// SetupMFA generates a fresh TOTP secret for the user and returns the QR code.
+// It does NOT activate MFA — the caller must call ConfirmMFA with a valid TOTP
+// code to prove the authenticator app is wired up correctly.
+func (s *AuthService) SetupMFA(ctx context.Context, userID uuid.UUID) (*MFASetupResult, error) {
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "find user", err)
+	}
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "SeceoKnight MDM",
+		AccountName: u.Email,
+	})
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "generate totp key", err)
+	}
+	// Persist the pending secret (mfa_enabled stays false until ConfirmMFA).
+	if err := s.users.StoreMFASecret(ctx, userID, key.Secret()); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "store mfa secret", err)
+	}
+	// Render the QR code server-side as a base64 PNG data-URI so the frontend
+	// can display it as a plain <img> without needing a client-side QR library.
+	png, err := qrcode.Encode(key.URL(), qrcode.Medium, 256)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "render qr code", err)
+	}
+	qrDataURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	return &MFASetupResult{Secret: key.Secret(), QRCode: qrDataURI}, nil
+}
+
+// ConfirmMFA verifies the user's TOTP code, then activates MFA and returns 8
+// single-use backup codes (plain-text — only shown once).
+func (s *AuthService) ConfirmMFA(ctx context.Context, userID uuid.UUID, code string) ([]string, error) {
+	mfaData, err := s.users.GetMFAData(ctx, userID)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "get mfa data", err)
+	}
+	if mfaData.MFASecret == nil {
+		return nil, apperr.New(apperr.CodeInvalidInput, "MFA setup not initiated — call /mfa/setup first")
+	}
+	if !totp.Validate(code, *mfaData.MFASecret) {
+		return nil, apperr.New(apperr.CodeUnauthorized, "invalid TOTP code")
+	}
+	plain, hashed := generateBackupCodes(8)
+	if err := s.users.EnableMFA(ctx, userID, *mfaData.MFASecret, hashed); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "enable mfa", err)
+	}
+	u, _ := s.users.FindByID(ctx, userID)
+	if u != nil {
+		s.auditUser(ctx, u.TenantID, userID, "user.mfa_enabled", userID, nil)
+	}
+	return plain, nil
+}
+
+// DisableMFA requires a valid TOTP code or backup code to prevent accidental
+// or unauthorised disablement.
+func (s *AuthService) DisableMFA(ctx context.Context, userID uuid.UUID, code string) error {
+	mfaData, err := s.users.GetMFAData(ctx, userID)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternal, "get mfa data", err)
+	}
+	if !mfaData.MFAEnabled {
+		return apperr.New(apperr.CodeInvalidInput, "MFA is not enabled")
+	}
+	// Verify TOTP first; fall back to backup code.
+	valid := mfaData.MFASecret != nil && totp.Validate(code, *mfaData.MFASecret)
+	if !valid {
+		hashed := hashBackupCode(code)
+		if cerr := s.users.ConsumeBackupCode(ctx, userID, hashed); cerr != nil {
+			return apperr.New(apperr.CodeUnauthorized, "invalid TOTP or backup code")
+		}
+	}
+	if err := s.users.DisableMFA(ctx, userID); err != nil {
+		return apperr.Wrap(apperr.CodeInternal, "disable mfa", err)
+	}
+	u, _ := s.users.FindByID(ctx, userID)
+	if u != nil {
+		s.auditUser(ctx, u.TenantID, userID, "user.mfa_disabled", userID, nil)
+	}
+	return nil
+}
+
+// RegenerateBackupCodes replaces all backup codes. Requires a live TOTP code.
+func (s *AuthService) RegenerateBackupCodes(ctx context.Context, userID uuid.UUID, totpCode string) ([]string, error) {
+	mfaData, err := s.users.GetMFAData(ctx, userID)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "get mfa data", err)
+	}
+	if !mfaData.MFAEnabled {
+		return nil, apperr.New(apperr.CodeInvalidInput, "MFA is not enabled")
+	}
+	if mfaData.MFASecret == nil || !totp.Validate(totpCode, *mfaData.MFASecret) {
+		return nil, apperr.New(apperr.CodeUnauthorized, "invalid TOTP code")
+	}
+	plain, hashed := generateBackupCodes(8)
+	if err := s.users.SetBackupCodes(ctx, userID, hashed); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, "set backup codes", err)
+	}
+	return plain, nil
+}
+
+// MFAStatus returns whether MFA is currently enabled for a user.
+func (s *AuthService) MFAStatus(ctx context.Context, userID uuid.UUID) (bool, error) {
+	mfaData, err := s.users.GetMFAData(ctx, userID)
+	if err != nil {
+		return false, apperr.Wrap(apperr.CodeInternal, "get mfa data", err)
+	}
+	return mfaData.MFAEnabled, nil
+}
+
+// ---- MFA helpers ---------------------------------------------------------
+
+// generateBackupCodes creates n random 8-char uppercase alphanumeric codes and
+// returns two parallel slices: plain-text (to show to user once) and their
+// SHA-256 hex hashes (to store in DB).
+func generateBackupCodes(n int) (plain []string, hashed []string) {
+	const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // omit I/O/0/1 (visually ambiguous)
+	buf := make([]byte, 1)
+	for i := 0; i < n; i++ {
+		code := make([]byte, 8)
+		for j := range code {
+			_, _ = rand.Read(buf)
+			code[j] = chars[int(buf[0])%len(chars)]
+		}
+		p := string(code)
+		plain = append(plain, p)
+		hashed = append(hashed, hashBackupCode(p))
+	}
+	return
+}
+
+// hashBackupCode returns the lower-hex SHA-256 of the uppercased, trimmed code.
+func hashBackupCode(code string) string {
+	h := sha256.Sum256([]byte(strings.ToUpper(strings.TrimSpace(code))))
+	return fmt.Sprintf("%x", h)
+}
