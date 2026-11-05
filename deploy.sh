@@ -1,25 +1,30 @@
 #!/bin/bash
 set -e
 
-echo "=== SeceoKnight MDM Deployment ==="
+echo ""
+echo "================================================="
+echo "   SeceoKnight MDM — Automated Deployment"
+echo "================================================="
+echo ""
 
 cd "$(dirname "$0")/server"
 
-# Auto-create .env from example if missing
+SERVER_IP=$(hostname -I | awk '{print $1}')
+echo "[1/4] Detected server IP: $SERVER_IP"
+
 if [ ! -f .env ]; then
-    echo "[1/3] No .env found — creating from .env.example..."
-    cp .env.example .env
-    echo "      Edit server/.env with your passwords, then re-run this script."
-    exit 0
+    echo "[2/4] No .env found — creating one automatically..."
+    sed "s|YOUR_SERVER_IP|$SERVER_IP|g" .env.example > .env
+    echo "      .env created with IP $SERVER_IP ✓"
+else
+    echo "[2/4] .env already exists ✓"
+    sed -i "s|MINIO_PUBLIC_ENDPOINT=.*|MINIO_PUBLIC_ENDPOINT=$SERVER_IP:9000|g" .env
+    sed -i "s|PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=http://$SERVER_IP:8080|g" .env
 fi
 
-echo "[1/3] .env found ✓"
+export $(grep -v '^#' .env | xargs 2>/dev/null)
 
-# Load .env
-export $(grep -v '^#' .env | xargs)
-
-# Auto-generate s3.json with credentials from .env
-echo "[2/3] Generating SeaweedFS S3 credentials..."
+echo "[3/4] Generating SeaweedFS S3 config..."
 mkdir -p infra/seaweedfs
 cat > infra/seaweedfs/s3.json << ENDJSON
 {
@@ -38,10 +43,18 @@ cat > infra/seaweedfs/s3.json << ENDJSON
 }
 ENDJSON
 
-echo "[3/3] Starting all containers..."
+echo "[4/4] Starting all containers..."
 docker compose up -d
 
 echo ""
-echo "✓ SeceoKnight MDM is running!"
-echo "  Dashboard : http://$(hostname -I | awk '{print $1}')"
-echo "  Grafana   : http://$(hostname -I | awk '{print $1}'):3001"
+echo "================================================="
+echo "  ✓ SeceoKnight MDM is running!"
+echo ""
+echo "  Dashboard : http://$SERVER_IP"
+echo "  Grafana   : http://$SERVER_IP:3001"
+echo ""
+echo "  Default login:"
+echo "    Email   : admin@mdm.local"
+echo "    Password: ChangeMe!123"
+echo "================================================="
+echo ""
