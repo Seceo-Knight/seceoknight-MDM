@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { api as axios } from './client';
 
 export type TriggerField = 'posture_score' | 'battery_level';
 export type Operator = 'lt' | 'lte' | 'gt' | 'gte' | 'eq';
