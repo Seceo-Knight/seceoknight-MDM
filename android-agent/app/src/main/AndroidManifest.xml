@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        Permissions: minimum required for full Android Enterprise Device Owner
+        management. Device-owner-required permissions (e.g. WIPE_DATA on the
+        DPM API) do NOT need declaring; they're granted by virtue of being
+        Device Owner.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Lets the agent ask to be exempted from Doze / battery optimization so the
+         foreground service keeps network access and the keep-alive alarm fires on
+         schedule while the screen is off. Without it the device drops to
+         "disconnected" minutes after the screen turns off and queued commands
+         don't run. Requested via the in-app Permissions panel (one-tap dialog). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"
+                     tools:ignore="ManifestTypo" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
+                     tools:ignore="ManifestTypo" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+                     tools:ignore="ManifestTypo" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Special access: enables foreground-app tracking (SIEM-style activity log).
+         Granted manually in Settings → Apps → Special access → Usage data access.
+         The agent's ActivityMonitor surfaces an `activity.permission.needed` event
+         when this is missing so the admin UI can prompt for it. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+                     tools:ignore="ProtectedPermissions" />
+
+    <application
+        android:name=".MDMApplication"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.MDM"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Android 10+ fully-managed (Device Owner) provisioning hand-off.
+            On targetSdk 31+ the Setup Wizard delivers the QR's admin-extras
+            bundle (server URL + enrollment token) to this activity via
+            ADMIN_POLICY_COMPLIANCE, NOT to the receiver's
+            onProfileProvisioningComplete. BIND_DEVICE_ADMIN ensures only the
+            system can launch it. No UI — it stashes the extras and finishes.
+        -->
+        <activity
+            android:name=".ProvisioningActivity"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Transparent, no-UI activity that surfaces the MediaProjection consent
+             for live screen mirroring and hands the token to WebRtcScreenShareManager.
+             Not exported — only the agent's own command handler launches it. -->
+        <activity
+            android:name=".ProjectionRequestActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Transparent, no-UI activity that turns the screen on (remote power-
+             button) so the live mirror survives a screen-off. Launched only by the
+             agent's own WAKE_DEVICE command handler; Device Owner only. -->
+        <activity
+            android:name=".WakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- In-app QR enrollment scanner, pinned to portrait (the zxing default
+             opens in landscape). Theme comes from zxing-android-embedded. -->
+        <activity
+            android:name=".PortraitCaptureActivity"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme"
+            android:exported="false"
+            tools:ignore="LockedOrientationActivity" />
+
+        <!-- DeviceAdminReceiver — declared in :mdm-core but visible here via merge -->
+        <receiver
+            android:name="com.mdm.core.admin.MDMDeviceAdminReceiver"
+            android:label="@string/app_name"
+            android:description="@string/device_admin_description"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
+                <action android:name="android.app.action.DEVICE_OWNER_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Delivered to THIS app right after it's updated (adb install -r
+                     / OTA self-update). Android parks an updated app in the
+                     "stopped" state until something launches it; this broadcast is
+                     how we relaunch the agent service automatically instead of the
+                     user having to open the app by hand. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            Foreground service that keeps the MQTT command channel alive.
+            Declares camera + location + microphone types so the service can
+            host the CAPTURE_PHOTO / GET_LOCATION / START_AUDIO_STREAM commands
+            while running.
+        -->
+        <service
+            android:name="com.mdm.command.CommandService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|camera|location|microphone|mediaProjection" />
+
+        <!-- Accessibility service for screen-share: auto-confirms the MediaProjection
+             consent dialog (silent capture on a managed device) and is the Phase-2
+             remote-control input target. A Device Owner permits it; enabling on stock
+             Android needs a one-time action (or Knox). -->
+        <service
+            android:name="com.mdm.command.RemoteControlService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_control_accessibility" />
+        </service>
+
+        <!--
+            Receives PackageInstaller session commit callbacks. In DA mode the
+            session returns STATUS_PENDING_USER_ACTION which carries an Intent
+            the receiver launches so the system "Install this app?" dialog
+            appears on the phone.
+        -->
+        <receiver
+            android:name="com.mdm.command.InstallResultReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mdm.PACKAGE_INSTALL_RESULT" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            Doze-resistant keep-alive. setAndAllowWhileIdle on this receiver
+            (every ~3 min) re-spawns CommandService even when the OS has
+            killed it for memory pressure, App Standby, or battery
+            optimization. Self-rescheduling — each tick arms the next.
+        -->
+        <receiver
+            android:name="com.mdm.command.KeepAliveAlarm$Receiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mdm.KEEPALIVE_PING" />
+            </intent-filter>
+        </receiver>
+
+        <!-- WorkManager init handled by Hilt -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="remove" />
+    </application>
+</manifest>

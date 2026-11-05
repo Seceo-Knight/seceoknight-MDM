@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Device admin descriptor. Lists the policies this admin will exercise. As
+  Device Owner, all of these are granted; on legacy devices only the listed
+  ones are enforceable.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android" android:visible="false">
+    <uses-policies>
+        <limit-password />
+        <watch-login />
+        <reset-password />
+        <force-lock />
+        <wipe-data />
+        <expire-password />
+        <encrypted-storage />
+        <disable-camera />
+        <disable-keyguard-features />
+    </uses-policies>
+</device-admin>

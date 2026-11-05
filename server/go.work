@@ -1,0 +1,13 @@
+go 1.22
+
+use (
+	./shared
+	./auth-service
+	./device-service
+	./policy-service
+	./command-service
+	./telemetry-service
+	./notification-service
+	./file-service
+	./audit-service
+)

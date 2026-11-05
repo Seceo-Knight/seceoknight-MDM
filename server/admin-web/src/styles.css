@@ -1,0 +1,265 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Design tokens. Values are space-separated RGB triplets so Tailwind can apply
+   opacity modifiers via rgb(var(--x) / <alpha>). Light is the default; .dark
+   overrides. Palette: a calm near-neutral grey scale + a single refined indigo
+   accent (Linear/Vercel-grade restraint — no rainbow, no random gradients).
+   ========================================================================== */
+:root {
+  --bg: 248 249 251;
+  --surface: 255 255 255;
+  --surface-2: 246 247 249;
+  --surface-3: 240 241 244;
+  --line: 229 231 235;
+  --line-strong: 212 215 222;
+
+  --fg: 17 24 39;
+  --muted: 100 109 124;
+  --faint: 148 156 168;
+
+  --accent: 79 70 229;
+  --accent-hover: 67 56 202;
+  --accent-fg: 255 255 255;
+  --accent-soft: 238 238 252;
+  --accent-300: 165 180 252;
+  --accent-950: 49 46 129;
+
+  --success: 5 150 105;       --success-soft: 220 245 233;
+  --warn: 202 138 4;          --warn-soft: 252 244 222;
+  --danger: 220 38 38;        --danger-soft: 253 232 232;
+  --info: 37 99 235;          --info-soft: 226 236 254;
+
+  /* Filled destructive CTA. Stays saturated in BOTH themes (unlike --danger,
+     which lightens in dark mode for text use) so white text always passes. */
+  --danger-solid: 220 38 38;  --danger-solid-hover: 185 28 28;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 9 9 12;
+  --surface: 21 21 26;
+  --surface-2: 28 28 34;
+  --surface-3: 35 35 42;
+  --line: 38 38 46;
+  --line-strong: 55 55 65;
+
+  --fg: 244 245 247;
+  --muted: 158 165 178;
+  --faint: 110 116 128;
+
+  --accent: 129 140 248;
+  --accent-hover: 165 180 252;
+  --accent-fg: 17 18 28;
+  --accent-soft: 35 36 58;
+  --accent-300: 129 140 248;
+  --accent-950: 30 31 56;
+
+  --success: 52 211 153;      --success-soft: 19 48 41;
+  --warn: 251 191 36;         --warn-soft: 52 42 16;
+  --danger: 248 113 113;      --danger-soft: 56 26 28;
+  --info: 96 165 250;         --info-soft: 23 37 64;
+
+  --danger-solid: 220 38 38;  --danger-solid-hover: 239 68 68;
+
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+
+@layer base {
+  body {
+    @apply bg-bg text-fg antialiased;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .tabular, table, .font-mono { font-variant-numeric: tabular-nums; }
+  h1, h2, h3, h4 { @apply tracking-[-0.01em]; }
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    @apply outline-none ring-2 ring-accent/50;
+  }
+  ::selection { background: rgb(var(--accent) / 0.22); }
+  ::placeholder { color: rgb(var(--faint)); }
+}
+
+/* Refined scrollbars (both themes). */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgb(var(--line-strong) / 0.7); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: rgb(var(--faint) / 0.8); background-clip: padding-box; }
+
+/* Skeleton shimmer */
+.skeleton { position: relative; overflow: hidden; background: rgb(var(--surface-2)); }
+.skeleton::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.35), transparent);
+  animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* Online pulse for status dots */
+@keyframes onlinePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--success) / 0.5); }
+  50%      { box-shadow: 0 0 0 4px rgb(var(--success) / 0); }
+}
+
+/* Leaflet map: blend tiles into the dark theme instead of a glaring white box. */
+.dark .leaflet-container { background: rgb(var(--surface-2)); }
+.dark .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.75); }
+.leaflet-container { font-family: inherit; }
+
+/* ============================================================================
+   Login hero — a self-contained "command center" surface. Permanently dark
+   regardless of app theme, with a living aurora mesh, a fine grid, grain, and a
+   cursor-reactive spotlight. Scoped to .login-hero so none of this leaks into
+   the restrained dashboard chrome.
+   ========================================================================== */
+.login-hero {
+  --mx: 50%; --my: 30%;
+  background:
+    radial-gradient(120% 120% at 15% 0%, #1a1b3a 0%, transparent 55%),
+    radial-gradient(120% 120% at 100% 100%, #0c2434 0%, transparent 50%),
+    linear-gradient(160deg, #07070d 0%, #0a0a16 50%, #060610 100%);
+}
+/* Fine engineering grid, masked to fade toward the edges. */
+.login-hero__grid {
+  background-image:
+    linear-gradient(rgba(148,163,255,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,255,0.06) 1px, transparent 1px);
+  background-size: 38px 38px;
+  -webkit-mask-image: radial-gradient(120% 90% at 30% 25%, #000 35%, transparent 78%);
+          mask-image: radial-gradient(120% 90% at 30% 25%, #000 35%, transparent 78%);
+}
+/* Cursor light on the login hero — a soft glow that FOLLOWS the pointer.
+   Performance: one static radial-gradient, rasterized once, then moved via
+   translate3d (GPU-composited, no per-frame repaint) — unlike animating a
+   gradient's position, which repaints the whole panel every frame and lagged.
+   JS sets the transform inside requestAnimationFrame so moves coalesce. */
+.login-hero__glow {
+  position: absolute; top: 0; left: 0;
+  width: 560px; height: 560px; margin: -280px 0 0 -280px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(129,140,248,0.22) 0%, rgba(99,102,241,0.10) 40%, transparent 70%);
+  pointer-events: none; opacity: 0; transition: opacity 400ms ease;
+  will-change: transform;
+}
+.login-hero:hover .login-hero__glow { opacity: 1; }
+/* Grain overlay (SVG turbulence baked into a data URI). */
+.login-hero__grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05; mix-blend-mode: overlay;
+}
+/* Gradient headline + animated underline word. */
+.login-hero__title { font-family: 'Bricolage Grotesque', 'Geist', sans-serif; }
+.login-hero__grad {
+  background: linear-gradient(100deg, #c7d2fe 0%, #818cf8 35%, #67e8f9 70%, #a5b4fc 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+/* Glass logo tile sheen sweep. */
+.login-hero__sheen::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
+}
+/* Staggered intro for hero rows. */
+.login-rise { opacity: 0; animation: loginRise 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+@keyframes loginRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Respect reduced-motion: kill the perpetual animations, keep content visible. */
+@media (prefers-reduced-motion: reduce) {
+  .login-hero *,
+  .animate-aurora-a, .animate-aurora-b, .animate-float, .animate-gradient-pan, .animate-sheen {
+    animation: none !important;
+  }
+  .login-rise, .page-enter { opacity: 1 !important; transform: none !important; }
+}
+
+/* ============================================================================
+   App chrome atmosphere. Extends the login's "command center" language into the
+   dashboard, but whisper-quiet and theme-aware (driven by --accent) so it adds
+   depth without competing with data. Used app-wide via <Layout>.
+   ========================================================================== */
+.app-aura {
+  background:
+    radial-gradient(58rem 40rem at 102% -8%, rgb(var(--accent) / 0.07), transparent 60%),
+    radial-gradient(48rem 38rem at -8% 4%, rgb(var(--accent) / 0.05), transparent 55%);
+}
+.dark .app-aura {
+  background:
+    radial-gradient(58rem 40rem at 102% -8%, rgb(var(--accent) / 0.12), transparent 60%),
+    radial-gradient(48rem 38rem at -8% 4%, rgb(129 140 248 / 0.08), transparent 55%);
+}
+
+/* Fine engineering grid behind all app content — the login hero's language
+   carried app-wide, faded toward the bottom so data stays the loudest layer.
+   Static (no animation) per the performance rules below. */
+.app-grid {
+  background-image:
+    linear-gradient(rgb(var(--fg) / 0.030) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--fg) / 0.030) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(140% 70% at 50% 0%, #000 25%, transparent 80%);
+          mask-image: radial-gradient(140% 70% at 50% 0%, #000 25%, transparent 80%);
+}
+.dark .app-grid {
+  background-image:
+    linear-gradient(rgb(148 163 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 255 / 0.045) 1px, transparent 1px);
+}
+
+/* Brand-gradient primary CTA + table hover rail (used by Button variant
+   `primary` and `tbody.rail`). Fixed saturated indigo→violet in BOTH themes —
+   like .brand-tile — so the CTA reads identically everywhere. */
+.btn-brand {
+  background-image: linear-gradient(180deg, #6d70f6 0%, #4f46e5 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px rgb(99 102 241 / 0.7), 0 1px 2px rgb(0 0 0 / 0.08);
+}
+.btn-brand:hover:not(:disabled) {
+  background-image: linear-gradient(180deg, #7d80ff 0%, #5a51f0 100%);
+  box-shadow: 0 10px 24px -10px rgb(99 102 241 / 0.85), 0 1px 2px rgb(0 0 0 / 0.08);
+}
+tbody.rail > tr { position: relative; }
+tbody.rail > tr:hover { box-shadow: inset 2px 0 0 rgb(var(--accent) / 0.65); }
+
+/* Shared brand-mark gradient (the "CS" tile) — identical across login + chrome. */
+.brand-tile {
+  background-image: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  color: #fff;
+  box-shadow: 0 6px 16px -6px rgb(99 102 241 / 0.55);
+}
+
+/* Per-route page entrance — one staggered settle on navigation. */
+/* Per-route page entrance — a calm fade. IMPORTANT: opacity-only, intentionally
+   NO transform. A lingering transform on this wrapper (it wraps the whole page,
+   including modals) would become the containing block for position:fixed
+   children, so modal overlays would center inside the page box instead of the
+   viewport and land off-screen on tall pages. Opacity never does that. */
+.page-enter { animation: pageEnter 0.34s ease both; }
+@keyframes pageEnter { from { opacity: 0; } to { opacity: 1; } }
+
+/* Sidebar active-item glow accent. */
+.nav-active-bar {
+  background: linear-gradient(180deg, rgb(var(--accent)) 0%, rgb(var(--accent) / 0.55) 100%);
+  box-shadow: 0 0 10px rgb(var(--accent) / 0.55);
+}
+
+/* ----------------------------------------------------------------------------
+   Performance + focus. The looping hero animations (drifting aurora orbs, the
+   logo "sheen" sweep) are expensive on large blurred layers — animating content
+   behind the heroes' backdrop-blur cards forces constant re-rasterization, the
+   main source of in-app jank — and the moving logo read as distracting. Keep
+   the motion ONLY on the login hero (the showcase); everywhere else the SAME
+   decorative elements render statically, so the look is preserved without cost.
+   -------------------------------------------------------------------------- */
+.animate-aurora-a, .animate-aurora-b, .animate-float, .animate-sheen {
+  animation: none !important;
+}
+
+/* Opt-in premium surface tint — a barely-there top-light gradient that gives
+   feature cards subtle depth/materiality without a flat fill. Theme-aware. */
+.card-grad { background-image: linear-gradient(180deg, rgb(var(--surface)) 0%, rgb(var(--surface-2) / 0.5) 100%); }
+.dark .card-grad { background-image: linear-gradient(180deg, rgb(var(--surface-2) / 0.55) 0%, rgb(var(--surface)) 100%); }

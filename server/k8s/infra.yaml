@@ -1,0 +1,141 @@
+# Stateful infrastructure (Postgres, Redis, NATS, MinIO, Mosquitto).
+# Use real operators (Crunchy/PGO for Postgres, Bitnami charts, etc.) in
+# production; this is the minimum self-hostable manifest set.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgres, namespace: mdm }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports: [{ containerPort: 5432 }]
+          env:
+            - name: POSTGRES_USER
+              value: mdm
+            - name: POSTGRES_DB
+              value: mdm
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: mdm-secrets, key: POSTGRES_DSN }}
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "mdm"] }
+            initialDelaySeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 50Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: mdm }
+spec:
+  ports: [{ port: 5432 }]
+  selector: { app: postgres }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis, namespace: mdm }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports: [{ containerPort: 6379 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis, namespace: mdm }
+spec:
+  ports: [{ port: 6379 }]
+  selector: { app: redis }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: nats, namespace: mdm }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: nats } }
+  template:
+    metadata: { labels: { app: nats } }
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          args: ["-js"]
+          ports: [{ containerPort: 4222 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: nats, namespace: mdm }
+spec:
+  ports: [{ port: 4222 }]
+  selector: { app: nats }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mosquitto, namespace: mdm }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mosquitto } }
+  template:
+    metadata: { labels: { app: mosquitto } }
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:2
+          ports: [{ containerPort: 1883 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mosquitto, namespace: mdm }
+spec:
+  ports: [{ name: mqtt, port: 1883 }]
+  selector: { app: mosquitto }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: minio, namespace: mdm }
+spec:
+  serviceName: minio
+  replicas: 1
+  selector: { matchLabels: { app: minio } }
+  template:
+    metadata: { labels: { app: minio } }
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          args: ["server", "/data"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: { secretKeyRef: { name: mdm-secrets, key: MINIO_ACCESS_KEY }}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: mdm-secrets, key: MINIO_SECRET_KEY }}
+          ports: [{ containerPort: 9000 }]
+          volumeMounts: [{ name: data, mountPath: /data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 200Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: minio, namespace: mdm }
+spec:
+  ports: [{ port: 9000 }]
+  selector: { app: minio }

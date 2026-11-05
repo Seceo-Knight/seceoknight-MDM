@@ -1,0 +1,5 @@
+
+# Postgres host bind-mount data dir (local dev DB — never commit)
+infra/pgdata/
+# DB safety backups
+infra/backups/

@@ -1,0 +1,224 @@
+# All MDM microservice Deployments + Services. Each Deployment shares the same
+# ConfigMap + Secret. Replace `image:` with your registry path before applying.
+#
+# Resource requests are conservative starting points; tune via HPA in prod.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: auth-service, namespace: mdm }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: auth-service } }
+  template:
+    metadata: { labels: { app: auth-service } }
+    spec:
+      containers:
+        - name: auth-service
+          image: ghcr.io/mdm/auth-service:latest
+          ports: [{ containerPort: 8001 }, { name: metrics, containerPort: 9100 }]
+          envFrom:
+            - configMapRef: { name: mdm-config }
+            - secretRef:    { name: mdm-secrets }
+          env: [{ name: SERVICE_NAME, value: auth-service }, { name: HTTP_PORT, value: "8001" }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8001 }, periodSeconds: 10 }
+          livenessProbe:  { httpGet: { path: /healthz, port: 8001 }, periodSeconds: 15, initialDelaySeconds: 20 }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: auth-service, namespace: mdm }
+spec:
+  selector: { app: auth-service }
+  ports:
+    - { name: http, port: 8001 }
+    - { name: metrics, port: 9100 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: device-service, namespace: mdm }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: device-service } }
+  template:
+    metadata: { labels: { app: device-service } }
+    spec:
+      containers:
+        - name: device-service
+          image: ghcr.io/mdm/device-service:latest
+          ports: [{ containerPort: 8002 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: device-service }, { name: HTTP_PORT, value: "8002" }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8002 } }
+          livenessProbe:  { httpGet: { path: /healthz, port: 8002 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: device-service, namespace: mdm }
+spec:
+  selector: { app: device-service }
+  ports: [{ name: http, port: 8002 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: policy-service, namespace: mdm }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: policy-service } }
+  template:
+    metadata: { labels: { app: policy-service } }
+    spec:
+      containers:
+        - name: policy-service
+          image: ghcr.io/mdm/policy-service:latest
+          ports: [{ containerPort: 8003 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: policy-service }, { name: HTTP_PORT, value: "8003" }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8003 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: policy-service, namespace: mdm }
+spec:
+  selector: { app: policy-service }
+  ports: [{ name: http, port: 8003 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: command-service, namespace: mdm }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: command-service } }
+  template:
+    metadata: { labels: { app: command-service } }
+    spec:
+      containers:
+        - name: command-service
+          image: ghcr.io/mdm/command-service:latest
+          ports: [{ containerPort: 8004 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: command-service }, { name: HTTP_PORT, value: "8004" }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8004 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: command-service, namespace: mdm }
+spec:
+  selector: { app: command-service }
+  ports: [{ name: http, port: 8004 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: telemetry-service, namespace: mdm }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: telemetry-service } }
+  template:
+    metadata: { labels: { app: telemetry-service } }
+    spec:
+      containers:
+        - name: telemetry-service
+          image: ghcr.io/mdm/telemetry-service:latest
+          ports: [{ containerPort: 8005 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: telemetry-service }, { name: HTTP_PORT, value: "8005" }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: telemetry-service, namespace: mdm }
+spec:
+  selector: { app: telemetry-service }
+  ports: [{ name: http, port: 8005 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: notification-service, namespace: mdm }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: notification-service } }
+  template:
+    metadata: { labels: { app: notification-service } }
+    spec:
+      containers:
+        - name: notification-service
+          image: ghcr.io/mdm/notification-service:latest
+          ports: [{ containerPort: 8006 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: notification-service }, { name: HTTP_PORT, value: "8006" }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notification-service, namespace: mdm }
+spec:
+  selector: { app: notification-service }
+  ports: [{ name: http, port: 8006 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: file-service, namespace: mdm }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: file-service } }
+  template:
+    metadata: { labels: { app: file-service } }
+    spec:
+      containers:
+        - name: file-service
+          image: ghcr.io/mdm/file-service:latest
+          ports: [{ containerPort: 8007 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: file-service }, { name: HTTP_PORT, value: "8007" }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: file-service, namespace: mdm }
+spec:
+  selector: { app: file-service }
+  ports: [{ name: http, port: 8007 }, { name: metrics, port: 9100 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: audit-service, namespace: mdm }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: audit-service } }
+  template:
+    metadata: { labels: { app: audit-service } }
+    spec:
+      containers:
+        - name: audit-service
+          image: ghcr.io/mdm/audit-service:latest
+          ports: [{ containerPort: 8008 }, { name: metrics, containerPort: 9100 }]
+          envFrom: [{ configMapRef: { name: mdm-config } }, { secretRef: { name: mdm-secrets } }]
+          env: [{ name: SERVICE_NAME, value: audit-service }, { name: HTTP_PORT, value: "8008" }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: audit-service, namespace: mdm }
+spec:
+  selector: { app: audit-service }
+  ports: [{ name: http, port: 8008 }, { name: metrics, port: 9100 }]
+---
+# Horizontal Pod Autoscalers — start with the highest-load services.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: command-service, namespace: mdm }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: command-service }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: telemetry-service, namespace: mdm }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: telemetry-service }
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

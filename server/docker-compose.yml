@@ -1,0 +1,338 @@
+# CyberSentinel MDM — Virtual Galaxy Infotech Ltd
+# Production-grade compose for local development. For prod, see k8s/.
+# Networks: every service joins `mdm` so they resolve each other by name.
+
+x-go-env: &go-env
+  POSTGRES_DSN: postgres://mdm:${POSTGRES_PASSWORD:-mdm}@postgres:5432/mdm?sslmode=disable
+  REDIS_ADDR: redis:6379
+  NATS_URL: nats://nats:4222
+  MQTT_BROKER: tcp://mosquitto:1883
+  MQTT_USER: ${MQTT_USER:-mdm}
+  MQTT_PASS: ${MQTT_PASS:-mdmpass}
+  MINIO_ENDPOINT: minio:9000
+  # Public host the browser will use to fetch presigned URLs. Defaults to
+  # localhost:9000 (works when the admin uses the same machine the stack runs
+  # on); override via .env when serving the UI to remote browsers.
+  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+  # Address devices must actually reach — baked into enrollment QR payloads and
+  # the enroll response's policy_url. MUST NOT be the placeholder mdm.example.com
+  # for a real device fleet, or enrolled devices target a dead host. Keep in sync
+  # with enrollment_config.server_base_url (and re-point devices) if the host IP
+  # changes. Defaults to the current dev LAN IP.
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://10.200.11.107:8080}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  JWT_SECRET: ${JWT_SECRET:-please-change-this-in-prod-32-bytes-min}
+  # Access-token lifetime. Kept short so a force-revoked admin session can't
+  # linger long even if the Redis denylist is unavailable (it's the backstop to
+  # the instant server-side revocation check). 15m aligns with the Android
+  # agent's DEFAULT_ACCESS_LIFE_S proactive-refresh window — adjust here AND in
+  # EnrollmentManager.DEFAULT_ACCESS_LIFE_S together.
+  JWT_ACCESS_TTL: "15m"
+  JWT_REFRESH_TTL: "168h"
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  ENV: ${ENV:-development}
+
+services:
+
+  # ------------------------------ infrastructure ------------------------------
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mdm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mdm}
+      POSTGRES_DB: mdm
+      # Initial super-admin, seeded ONCE on a fresh DB by the env-driven init
+      # script infra/migrations/010_seed_superadmin.sh (no credentials are
+      # hardcoded in SQL). Override in .env; defaults preserve the historical
+      # dev login. NOTE: only applies on a fresh ./infra/pgdata — see README.
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@mdm.local}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-ChangeMe!123}
+    volumes:
+      # Host bind-mount (NOT a named volume) so the database survives
+      # `docker compose down -v` and `docker volume prune` — the dev DB was
+      # repeatedly getting wiped by those commands, stranding enrolled devices
+      # ("fresh database — re-enroll"). A bind mount can only be cleared by
+      # deleting ./infra/pgdata on the host, so resets are now explicit.
+      - ./infra/pgdata:/var/lib/postgresql/data
+      - ./infra/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mdm -d mdm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [mdm]
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    networks: [mdm]
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    networks: [mdm]
+    ports: ["${NATS_PORT:-4222}:4222", "${NATS_MONITOR_PORT:-8222}:8222"]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    ports: ["${MQTT_TCP_PORT:-1883}:1883", "${MQTT_WS_PORT:-9001}:9001"]
+    networks: [mdm]
+
+  minio:
+    image: minio/minio:latest
+    # Console moved off 9001 because mosquitto MQTT-over-WS already binds it.
+    command: server /data --console-address ":9101"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9101}:9101"]
+    networks: [mdm]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [mdm]
+    ports: ["${PROMETHEUS_PORT:-9090}:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["${GRAFANA_PORT:-3001}:3000"]
+    networks: [mdm]
+
+  # ------------------------------- gateway -----------------------------------
+
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=server_mdm
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --metrics.prometheus=true
+    environment:
+      # The daemon API on this host (29.x) requires API v1.40+; pin so the
+      # docker client inside traefik doesn't fall back to a stale default.
+      DOCKER_API_VERSION: "1.43"
+    ports:
+      # Traefik no longer binds host :80 here — the host's Docker daemon
+      # rejects Traefik's docker-client API version, so service discovery
+      # is broken and any request that lands on Traefik gets `404 page not
+      # found`. Admin-web nginx takes :80 instead (see below) so the agent's
+      # default URL (`http://<host>`, no port) just works.
+      - "${TRAEFIK_DASHBOARD_PORT:-8081}:8080"   # traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [mdm]
+
+  # ------------------------------- services ----------------------------------
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: auth-service
+      HTTP_PORT: "8001"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis:    {condition: service_started}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=PathPrefix(`/api/v1/auth`)
+      - traefik.http.services.auth.loadbalancer.server.port=8001
+    networks: [mdm]
+
+  device-service:
+    build:
+      context: .
+      dockerfile: device-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: device-service
+      HTTP_PORT: "8002"
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats:     {condition: service_started}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.device.rule=PathPrefix(`/api/v1/devices`) || PathPrefix(`/api/v1/enroll`)
+      - traefik.http.services.device.loadbalancer.server.port=8002
+    networks: [mdm]
+
+  policy-service:
+    build:
+      context: .
+      dockerfile: policy-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: policy-service
+      HTTP_PORT: "8003"
+    depends_on:
+      postgres: {condition: service_healthy}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.policy.rule=PathPrefix(`/api/v1/policies`)
+      - traefik.http.services.policy.loadbalancer.server.port=8003
+    networks: [mdm]
+
+  command-service:
+    build:
+      context: .
+      dockerfile: command-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: command-service
+      HTTP_PORT: "8004"
+    depends_on:
+      postgres:  {condition: service_healthy}
+      nats:      {condition: service_started}
+      mosquitto: {condition: service_started}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.command.rule=PathPrefix(`/api/v1/commands`)
+      - traefik.http.services.command.loadbalancer.server.port=8004
+    networks: [mdm]
+
+  telemetry-service:
+    build:
+      context: .
+      dockerfile: telemetry-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: telemetry-service
+      HTTP_PORT: "8005"
+    depends_on:
+      postgres: {condition: service_healthy}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.telemetry.rule=PathPrefix(`/api/v1/telemetry`)
+      - traefik.http.services.telemetry.loadbalancer.server.port=8005
+    networks: [mdm]
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: notification-service
+      HTTP_PORT: "8006"
+      # WebRTC screen-share: shared secret with coturn (use-auth-secret scheme)
+      # and the TURN URL handed to clients via /api/v1/stream/turn. TURN_URL host
+      # must be the LAN IP devices/browsers reach (set-server-ip.sh keeps it in sync).
+      TURN_SECRET: ${TURN_SECRET:-changeme-turn-secret}
+      TURN_URL: ${TURN_URL:-turn:10.200.11.42:3478}
+    depends_on:
+      mosquitto: {condition: service_started}
+      nats:      {condition: service_started}
+    networks: [mdm]
+
+  # TURN/STUN relay for WebRTC screen mirroring. Host networking so coturn can
+  # bind its relay port range directly — TURN needs reachable UDP ports, which
+  # is awkward through Docker's NAT. On a pure LAN, host/STUN candidates may
+  # connect directly; coturn is the reliable relay fallback (and the force-relay
+  # path when agent and browser aren't directly reachable).
+  coturn:
+    image: coturn/coturn:4.6.2
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - -n
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:-changeme-turn-secret}
+      - --realm=mdm
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --log-file=stdout
+
+  file-service:
+    build:
+      context: .
+      dockerfile: file-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: file-service
+      HTTP_PORT: "8007"
+    depends_on:
+      minio:    {condition: service_started}
+      postgres: {condition: service_healthy}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.file.rule=PathPrefix(`/api/v1/files`)
+      - traefik.http.services.file.loadbalancer.server.port=8007
+    networks: [mdm]
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: audit-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: audit-service
+      HTTP_PORT: "8008"
+    depends_on:
+      postgres: {condition: service_healthy}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.audit.rule=PathPrefix(`/api/v1/audit`)
+      - traefik.http.services.audit.loadbalancer.server.port=8008
+    networks: [mdm]
+
+  admin-web:
+    build:
+      context: ./admin-web
+      dockerfile: Dockerfile
+    # THE port of the whole setup. The browser, the API (proxied), and the
+    # MQTT-over-WebSocket bridge all come through nginx here, so this single
+    # published port is all you expose. Change it via WEB_PORT in .env (e.g.
+    # WEB_PORT=9090) — then update PUBLIC_BASE_URL to match the new port, since
+    # that's the address baked into enrollment payloads / the agent.
+    #   - WEB_PORT       primary console port (default 8080)
+    #   - WEB_PORT_HTTP  plain-:80 convenience binding so the agent's bare
+    #                    `http://<host>` URL (no port) works (default 80)
+    ports:
+      - "${WEB_PORT:-8080}:80"
+      - "${WEB_PORT_HTTP:-80}:80"
+    depends_on: [auth-service, device-service]
+    networks: [mdm]
+
+volumes:
+  # NOTE: postgres data is now a host bind-mount (./infra/pgdata), see the
+  # postgres service above — intentionally NOT a named volume so it can't be
+  # destroyed by `docker compose down -v`.
+  redis-data:
+  mosquitto-data:
+  minio-data:
+  grafana-data:
+
+networks:
+  mdm:
+    driver: bridge

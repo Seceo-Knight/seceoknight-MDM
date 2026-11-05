@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">CyberSentinel MDM</string>
+    <string name="company_name">Virtual Galaxy Infotech Ltd</string>
+    <string name="device_admin_description">CyberSentinel MDM — allows Virtual Galaxy Infotech Ltd to remotely manage and secure this device.</string>
+    <string name="enrollment_title">Device enrollment</string>
+    <string name="enroll_server">Server URL</string>
+    <string name="enroll_token">Enrollment token</string>
+    <string name="enroll_button">Enroll</string>
+    <string name="enroll_in_progress">Enrolling…</string>
+    <string name="enroll_success">Enrolled. CyberSentinel MDM is running.</string>
+    <string name="not_device_owner">CyberSentinel MDM must be provisioned as Device Owner. Factory-reset and scan the QR from your admin console.</string>
+</resources>

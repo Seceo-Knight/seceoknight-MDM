@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/brand/cybersentinel-icon.png" />
+    <link rel="apple-touch-icon" href="/brand/cybersentinel-icon.png" />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>CyberSentinel · Mobile Device Management</title>
+    <meta name="description" content="CyberSentinel — Mobile Device Management. Detect · Defend · Comply. By Virtual Galaxy Infotech Ltd." />
+    <!-- Type system: Geist — primary UI typeface (precise, geometric, excellent
+         numerals); Geist Mono — telemetry, serials, hashes, code; Bricolage
+         Grotesque — the characterful display face for page & panel titles;
+         Montserrat — only the CyberSentinel wordmark (matches the brand logo). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Montserrat:wght@600;700;800&display=swap" />
+    <!-- Leaflet — used by the Dashboard fleet map. CDN-hosted so no npm
+         dependency is needed; loaded synchronously so window.L is ready
+         before React mounts the DeviceMap component. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+  </head>
+  <body class="h-full bg-bg text-fg font-sans">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Popup shown by the SHOW_MESSAGE command. Dialog-themed so it floats
+             over whatever's on screen; not in recents. -->
+        <activity
+            android:name="com.mdm.command.MessageActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.Light.Dialog.Alert" />
+    </application>
+</manifest>

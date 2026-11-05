@@ -1,0 +1,244 @@
+openapi: 3.0.3
+info:
+  title: MDM Platform API
+  version: 1.0.0
+  description: |
+    Public API surface exposed via the gateway. All endpoints under /api/v1/.
+    Auth: Bearer JWT. Two token kinds (claim `knd`):
+      - `user`   for admin/operator humans (carries `rol`: viewer|operator|admin|super_admin)
+      - `device` for enrolled devices
+    Authorization: RBAC enforced per route via a central permission matrix
+    (shared/authz). Command issuance is risk-tiered per kind
+    (command:issue:basic|privileged|surveillance); user/role management is
+    hierarchy-gated. GET /api/v1/auth/roles returns the full matrix.
+servers:
+  - url: https://mdm.example.com
+    description: Production
+  - url: http://localhost
+    description: Local
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Device:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        alias: { type: string, nullable: true, description: "operator-set friendly name" }
+        group_id: { type: string, format: uuid, nullable: true }
+        serial_number: { type: string }
+        model: { type: string }
+        manufacturer: { type: string }
+        os_version: { type: string }
+        state: { type: string, enum: [pending, enrolled, offline, wiped, retired] }
+        last_heartbeat_at: { type: string, format: date-time }
+        last_mgmt_mode: { type: string, enum: [owner, admin, none], description: "reported each heartbeat" }
+        last_battery_pct: { type: integer, nullable: true }
+        last_network_type: { type: string, nullable: true }
+        last_latitude: { type: number, nullable: true }
+        last_longitude: { type: number, nullable: true }
+        applied_policy_version: { type: integer }
+    DeviceGroup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        device_count: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string, enum: [viewer, operator, admin, super_admin] }
+        tenant_id: { type: string, format: uuid }
+        permissions: { type: array, items: { type: string }, description: "present on login / /auth/me" }
+    Policy:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: integer }
+        spec: { type: object, additionalProperties: true }
+    Command:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        kind: { type: string }
+        state:
+          type: string
+          enum: [pending, dispatched, acknowledged, succeeded, failed, timed_out]
+        payload: { type: object, additionalProperties: true }
+        result: { type: object, additionalProperties: true }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+
+security:
+  - bearer: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Exchange credentials for an access + refresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                mfa_code: { type: string }
+      responses:
+        "200":
+          description: token pair
+  /api/v1/auth/refresh:
+    post:
+      summary: Rotate refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties: { refresh_token: { type: string } }
+      responses:
+        "200": { description: rotated pair }
+  /api/v1/auth/logout:
+    post: { summary: Revoke a refresh token, security: [] }
+  /api/v1/auth/me:
+    get: { summary: "Current user (id/email/role/tenant + permissions)" }
+    patch: { summary: Update own profile (email) }
+  /api/v1/auth/change-password:
+    post: { summary: Change own password (verifies current) }
+  /api/v1/auth/roles:
+    get: { summary: "RBAC matrix: roles, all permissions, role→permissions (perm role:read)" }
+  /api/v1/auth/users:
+    get: { summary: List tenant users (perm user:read) }
+    post: { summary: "Create a user (perm user:manage; cannot create a role above your own)" }
+  /api/v1/auth/users/{id}/role:
+    patch:
+      summary: "Change a user's role (perm user:manage; no escalation; guards last super_admin)"
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid }}]
+  /api/v1/auth/users/{id}/deactivate:
+    post:
+      summary: "Deactivate a user (perm user:manage; cannot deactivate self or last super_admin)"
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid }}]
+
+  /api/v1/enroll/tokens:
+    post:
+      summary: Admin — create an enrollment token (and its QR payload URL)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                policy_id: { type: string, nullable: true }
+                one_shot: { type: boolean }
+                max_uses: { type: integer }
+                expires_in: { type: string, example: "24h" }
+      responses:
+        "201": { description: created }
+  /api/v1/enroll/qr/{tokenID}:
+    get:
+      summary: QR payload (JSON encoded into the QR image)
+      security: []
+      parameters: [{ name: tokenID, in: path, required: true, schema: { type: string }}]
+      responses: { "200": { description: ok } }
+  /api/v1/enroll:
+    post:
+      summary: Device — exchange enrollment token for device credentials
+      security: []
+
+  /api/v1/devices:
+    get: { summary: "List devices (q searches alias/serial/model/imei; ?state=)" }
+  /api/v1/devices/{id}:
+    get: { summary: Get device }
+    patch: { summary: "Update device (alias and/or group_id; perm device:update). Empty string clears." }
+    delete: { summary: "Retire device (perm device:retire)" }
+  /api/v1/devices/me/heartbeat:
+    post: { summary: "Device heartbeat (battery/network/location + mgmt_mode)" }
+
+  /api/v1/groups:
+    get: { summary: "List device groups with live device counts (perm group:read)" }
+    post: { summary: "Create a group (perm group:manage)" }
+  /api/v1/groups/{id}:
+    patch: { summary: "Rename/redescribe a group (perm group:manage)" }
+    delete: { summary: "Delete a group; members fall back to tenant policy (perm group:manage)" }
+
+  /api/v1/policies:
+    get: { summary: "List policies (perm policy:read)" }
+    post: { summary: "Create/update policy (perm policy:write)" }
+  /api/v1/policies/{id}:
+    get: { summary: Get policy }
+    delete: { summary: "Delete policy (perm policy:write)" }
+  /api/v1/policies/{id}/diff:
+    get: { summary: Compute diff between two versions }
+  /api/v1/policies/{id}/versions:
+    post: { summary: "Save a new version (perm policy:write)" }
+  /api/v1/policies/{id}/assignments:
+    get: { summary: List assignments of a policy (across device/group/tenant) }
+  /api/v1/policies/resolved-for/{deviceID}:
+    get: { summary: Effective merged policy for a device }
+  /api/v1/policies/for-device/{deviceID}:
+    get: { summary: All assignments covering a device (device+group+tenant layers) }
+  /api/v1/policies/assign:
+    post: { summary: "Assign a policy to device|group|tenant (perm policy:assign)" }
+  /api/v1/policies/unassign:
+    post: { summary: "Unassign (perm policy:assign); fires APPLY/CLEAR_POLICY to reconcile" }
+  /api/v1/policies/assigned:
+    get: { summary: Device — fetch its assigned (merged) policy }
+
+  /api/v1/commands:
+    post: { summary: "Issue a command to a device (perm per kind: basic|privileged|surveillance)" }
+  /api/v1/commands/broadcast:
+    post: { summary: "Fan a command out to every device in a group {group_id, kind, payload}" }
+  /api/v1/commands/by-device/{deviceID}:
+    get: { summary: Command history for a device }
+  /api/v1/commands/{id}:
+    get: { summary: Get command }
+  /api/v1/commands/poll:
+    get: { summary: Device — claim pending commands (MQTT fallback) }
+  /api/v1/commands/{id}/ack:
+    post: { summary: Device — ACK command received }
+  /api/v1/commands/{id}/result:
+    post: { summary: Device — report final result }
+
+  /api/v1/telemetry/ingest:
+    post: { summary: Device — push batched telemetry events }
+  /api/v1/telemetry/devices/{deviceID}/latest:
+    get: { summary: "Latest snapshot per kind (perm telemetry:read)" }
+  /api/v1/telemetry/devices/{deviceID}/events:
+    get: { summary: "Activity/event stream for a device (?kind_prefix=, ?limit=)" }
+
+  /api/v1/files:
+    get: { summary: "List files (?kind= e.g. apk|photo|audio, ?device_id=) (perm file:read)" }
+  /api/v1/files/upload:
+    post: { summary: "Admin upload a file (multipart) (perm file:write)" }
+  /api/v1/files/device-upload:
+    post: { summary: "Device upload (multipart, kind=photo|audio|log) — device token" }
+  /api/v1/files/{id}/url:
+    get: { summary: "Presigned download URL (perm file:read)" }
+  /api/v1/files/{id}:
+    delete: { summary: "Delete a file; audio segment delete invalidates the stitched cache (perm file:delete)" }
+  /api/v1/files/audio/session/{sessionID}/url:
+    get: { summary: "Stitch a recording session's AAC/ADTS segments into one .aac and presign it" }
+  /api/v1/files/audio/session/{sessionID}:
+    delete: { summary: "Delete a whole recording session (all segments + stitched cache) (perm file:delete)" }
+
+  /api/v1/audit:
+    get: { summary: "List audit entries (perm audit:read)" }
+    post: { summary: "Append audit entry (perm audit:write)" }

@@ -1,0 +1,37 @@
+{
+  "uid": "mdm-overview",
+  "title": "MDM Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["mdm"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "HTTP Requests / sec",
+      "targets": [
+        { "expr": "sum(rate(mdm_http_requests_total[1m]))", "refId": "A" }
+      ],
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Request error rate (5xx)",
+      "targets": [
+        { "expr": "sum(rate(mdm_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(mdm_http_requests_total[5m]))", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 latency (per service)",
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(mdm_http_request_duration_seconds_bucket[5m])) by (service, le))", "refId": "A" }
+      ],
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 }
+    }
+  ]
+}

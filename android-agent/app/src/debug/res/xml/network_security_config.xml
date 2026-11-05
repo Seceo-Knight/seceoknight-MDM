@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only variant. Overrides the release config to permit cleartext HTTP
+    to arbitrary hosts (so you can test against `http://<your-lan-ip>:8080`
+    without bringing up TLS). Never ship release builds with this in place —
+    Android's manifest merger will use main/.../network_security_config.xml
+    for release variants.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
