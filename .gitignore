@@ -66,3 +66,4 @@ logs/
 # TypeScript incremental build metadata (tsc -b)
 *.tsbuildinfo
 .github/workflows/
+server/infra/seaweedfs/s3.json
