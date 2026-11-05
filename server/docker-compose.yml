@@ -91,9 +91,7 @@ services:
     networks: [mdm]
 
   minio:
-    build:
-      context: ./minio-build
-      dockerfile: Dockerfile
+    image: registry.min.io/minio/minio:latest
     # Console moved off 9001 because mosquitto MQTT-over-WS already binds it.
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
