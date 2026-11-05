@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Pencil, ShieldAlert, Activity, Zap, Clock, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { Button, Field, Input } from '../components/ui';
-import { useConfirm } from '../components/confirm';
+import { confirmDialog } from '../components/confirm';
 import { toast } from '../components/toast';
 import {
   listRules, createRule, updateRule, deleteRule, listEvents,
@@ -174,7 +174,7 @@ function RuleForm({
           </div>
 
           {/* Cooldown */}
-          <Field label="Cooldown between actions (minutes)" description="Prevents the same device from being actioned repeatedly">
+          <Field label="Cooldown between actions (minutes)" hint="Prevents the same device from being actioned repeatedly">
             <Input
               type="number" min={1} max={10080}
               value={form.cooldown_minutes}
@@ -220,7 +220,6 @@ export function ComplianceRules() {
   const [editing, setEditing] = useState<ComplianceRule | null>(null);
   const [saving, setSaving] = useState(false);
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
-  const confirm = useConfirm();
 
   const fetchRules = useCallback(async () => {
     setLoadingRules(true);
@@ -256,10 +255,11 @@ export function ComplianceRules() {
   };
 
   const handleDelete = async (rule: ComplianceRule) => {
-    const ok = await confirm({
+    const ok = await confirmDialog({
       title: 'Delete compliance rule',
       message: `Delete "${rule.name}"? This cannot be undone. Any pending cooldowns will also be cleared.`,
-      danger: true,
+      tone: 'danger',
+      confirmLabel: 'Delete',
     });
     if (!ok) return;
     try {
@@ -353,7 +353,7 @@ export function ComplianceRules() {
             <p className="text-xs text-muted mt-1 max-w-xs mx-auto">
               Create a rule to automatically lock or wipe devices when their posture score drops.
             </p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={() => { setEditing(null); setShowForm(true); }}>
+            <Button variant="ghost" size="sm" className="mt-4" onClick={() => { setEditing(null); setShowForm(true); }}>
               <Plus size={14} className="mr-1" /> Create first rule
             </Button>
           </div>
