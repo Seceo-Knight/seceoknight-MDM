@@ -144,6 +144,29 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [mdm]
 
+  # ------------------------------ migrations ---------------------------------
+  # Runs every *.sql file in infra/migrations/ in sorted order on every
+  # `docker compose up`. Tracks applied files in a _migrations table so only
+  # new migrations actually execute — existing ones are skipped safely.
+  # All DB-dependent services depend on this completing before they start.
+
+  db-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: mdm
+      PGPASSWORD: ${POSTGRES_PASSWORD:-mdm}
+      PGDB: mdm
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ./infra/migrations:/migrations:ro
+      - ./infra/migrate.sh:/migrate.sh:ro
+    command: ["sh", "/migrate.sh"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [mdm]
+    restart: "no"
+
   # ------------------------------- services ----------------------------------
 
   auth-service:
@@ -155,8 +178,9 @@ services:
       SERVICE_NAME: auth-service
       HTTP_PORT: "8001"
     depends_on:
-      postgres: {condition: service_healthy}
-      redis:    {condition: service_started}
+      postgres:   {condition: service_healthy}
+      redis:      {condition: service_started}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.auth.rule=PathPrefix(`/api/v1/auth`)
@@ -172,8 +196,9 @@ services:
       SERVICE_NAME: device-service
       HTTP_PORT: "8002"
     depends_on:
-      postgres: {condition: service_healthy}
-      nats:     {condition: service_started}
+      postgres:   {condition: service_healthy}
+      nats:       {condition: service_started}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.device.rule=PathPrefix(`/api/v1/devices`) || PathPrefix(`/api/v1/enroll`)
@@ -189,7 +214,8 @@ services:
       SERVICE_NAME: policy-service
       HTTP_PORT: "8003"
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres:   {condition: service_healthy}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.policy.rule=PathPrefix(`/api/v1/policies`)
@@ -205,9 +231,10 @@ services:
       SERVICE_NAME: command-service
       HTTP_PORT: "8004"
     depends_on:
-      postgres:  {condition: service_healthy}
-      nats:      {condition: service_started}
-      mosquitto: {condition: service_started}
+      postgres:   {condition: service_healthy}
+      nats:       {condition: service_started}
+      mosquitto:  {condition: service_started}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.command.rule=PathPrefix(`/api/v1/commands`)
@@ -223,7 +250,8 @@ services:
       SERVICE_NAME: telemetry-service
       HTTP_PORT: "8005"
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres:   {condition: service_healthy}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.telemetry.rule=PathPrefix(`/api/v1/telemetry`)
@@ -279,8 +307,9 @@ services:
       SERVICE_NAME: file-service
       HTTP_PORT: "8007"
     depends_on:
-      minio:    {condition: service_started}
-      postgres: {condition: service_healthy}
+      minio:      {condition: service_started}
+      postgres:   {condition: service_healthy}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.file.rule=PathPrefix(`/api/v1/files`)
@@ -296,7 +325,8 @@ services:
       SERVICE_NAME: audit-service
       HTTP_PORT: "8008"
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres:   {condition: service_healthy}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.audit.rule=PathPrefix(`/api/v1/audit`)
@@ -314,8 +344,9 @@ services:
       COMMAND_SERVICE_URL: "http://command-service:8004"
       ALERT_SERVICE_URL: "http://alert-service:8010"
     depends_on:
-      postgres:       {condition: service_healthy}
+      postgres:        {condition: service_healthy}
       command-service: {condition: service_started}
+      db-migrate:      {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.compliance.rule=PathPrefix(`/api/v1/compliance`)
@@ -331,7 +362,8 @@ services:
       SERVICE_NAME: alert-service
       HTTP_PORT: "8010"
     depends_on:
-      postgres: {condition: service_healthy}
+      postgres:   {condition: service_healthy}
+      db-migrate: {condition: service_completed_successfully}
     labels:
       - traefik.enable=true
       - traefik.http.routers.alert.rule=PathPrefix(`/api/v1/alerts`)
