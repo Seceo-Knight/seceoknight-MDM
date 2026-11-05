@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,10 +23,11 @@ import (
 
 // Engine is the background compliance evaluation loop.
 type Engine struct {
-	store            *store.Store
-	issuer           *auth.Issuer
+	store             *store.Store
+	issuer            *auth.Issuer
 	commandServiceURL string
-	interval         time.Duration
+	alertServiceURL   string
+	interval          time.Duration
 	// systemUserID is embedded into the JWT the engine uses to call command-service.
 	// A well-known UUID that is never a real user; audit logs show "compliance-engine".
 	systemUserID uuid.UUID
@@ -37,10 +39,15 @@ func New(s *store.Store, issuer *auth.Issuer, commandServiceURL string) *Engine 
 	if url == "" {
 		url = "http://command-service:8004"
 	}
+	alertURL := os.Getenv("ALERT_SERVICE_URL")
+	if alertURL == "" {
+		alertURL = "http://alert-service:8010"
+	}
 	return &Engine{
 		store:             s,
 		issuer:            issuer,
 		commandServiceURL: url,
+		alertServiceURL:   alertURL,
 		interval:          5 * time.Minute,
 		// Fixed UUID so audit logs attribute commands to the compliance engine.
 		systemUserID: uuid.MustParse("00000000-0000-0000-0000-000000000009"),
@@ -147,6 +154,8 @@ func (e *Engine) tick(ctx context.Context) {
 						Str("device", dev.ID.String()).
 						Float64("value", val).Float64("threshold", rule.Threshold).
 						Msg("compliance: rule fired")
+					// Fan out alert notification asynchronously.
+					go e.notifyAlert(tenantID, rule, dev.ID, val)
 				}
 				_ = e.recordEvent(ctx, ev)
 			}
@@ -256,4 +265,53 @@ func (e *Engine) dispatchCommand(ctx context.Context, tenantID, deviceID uuid.UU
 
 func (e *Engine) recordEvent(ctx context.Context, ev store.Event) error {
 	return e.store.InsertEvent(ctx, &ev)
+}
+
+type alertNotifyRequest struct {
+	TenantID  string         `json:"tenant_id"`
+	EventType string         `json:"event_type"`
+	Subject   string         `json:"subject"`
+	Data      map[string]any `json:"data"`
+}
+
+// notifyAlert fires a POST to alert-service /internal/notify (best-effort).
+func (e *Engine) notifyAlert(tenantID uuid.UUID, rule store.Rule, deviceID uuid.UUID, val float64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	payload := alertNotifyRequest{
+		TenantID:  tenantID.String(),
+		EventType: "compliance_trigger",
+		Subject:   fmt.Sprintf("Compliance rule fired: %s", rule.Name),
+		Data: map[string]any{
+			"rule_id":         rule.ID.String(),
+			"rule_name":       rule.Name,
+			"trigger_field":   rule.TriggerField,
+			"operator":        rule.Operator,
+			"threshold":       rule.Threshold,
+			"actual_value":    val,
+			"action":          rule.Action,
+			"device_id":       deviceID.String(),
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		e.alertServiceURL+"/internal/notify", bytes.NewReader(body))
+	if err != nil {
+		log.Warn().Err(err).Msg("alert: build request failed")
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Warn().Err(err).Msg("alert: notify request failed")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		log.Warn().Int("status", resp.StatusCode).Msg("alert: notify returned error")
+	}
 }

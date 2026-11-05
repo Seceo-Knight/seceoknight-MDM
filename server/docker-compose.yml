@@ -312,6 +312,7 @@ services:
       SERVICE_NAME: compliance-service
       HTTP_PORT: "8009"
       COMMAND_SERVICE_URL: "http://command-service:8004"
+      ALERT_SERVICE_URL: "http://alert-service:8010"
     depends_on:
       postgres:       {condition: service_healthy}
       command-service: {condition: service_started}
@@ -319,6 +320,22 @@ services:
       - traefik.enable=true
       - traefik.http.routers.compliance.rule=PathPrefix(`/api/v1/compliance`)
       - traefik.http.services.compliance.loadbalancer.server.port=8009
+    networks: [mdm]
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: alert-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: alert-service
+      HTTP_PORT: "8010"
+    depends_on:
+      postgres: {condition: service_healthy}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.alert.rule=PathPrefix(`/api/v1/alerts`)
+      - traefik.http.services.alert.loadbalancer.server.port=8010
     networks: [mdm]
 
   admin-web:
