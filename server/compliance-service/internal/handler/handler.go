@@ -189,6 +189,184 @@ func (h *Handler) DeleteRule(c *fiber.Ctx) error {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
+// ─── Geofences ────────────────────────────────────────────────────────────────
+
+type geofenceInput struct {
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Kind         string          `json:"kind"`
+	Coordinates  json.RawMessage `json:"coordinates"`
+	CenterLat    float64         `json:"center_lat"`
+	CenterLng    float64         `json:"center_lng"`
+	RadiusMeters int             `json:"radius_meters"`
+	Action       string          `json:"action"`
+	Color        string          `json:"color"`
+	Enabled      *bool           `json:"enabled"`
+}
+
+func (in *geofenceInput) validate() error {
+	if in.Name == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "name is required")
+	}
+	if in.Kind == "" {
+		in.Kind = "polygon"
+	}
+	if in.Kind != "polygon" && in.Kind != "circle" {
+		return fiber.NewError(fiber.StatusBadRequest, "kind must be polygon or circle")
+	}
+	if in.Action == "" {
+		in.Action = "alert"
+	}
+	if in.Action != "alert" && in.Action != "lock" && in.Action != "wipe" {
+		return fiber.NewError(fiber.StatusBadRequest, "action must be alert, lock, or wipe")
+	}
+	if in.Color == "" {
+		in.Color = "#2DD4E8"
+	}
+	if in.Coordinates == nil || !json.Valid(in.Coordinates) {
+		in.Coordinates = json.RawMessage(`[]`)
+	}
+	if in.RadiusMeters <= 0 {
+		in.RadiusMeters = 500
+	}
+	return nil
+}
+
+// ListGeofences GET /api/v1/compliance/geofences
+func (h *Handler) ListGeofences(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid tenant")
+	}
+	fences, err := h.store.ListGeofences(c.Context(), tid)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if fences == nil {
+		fences = []store.Geofence{}
+	}
+	return c.JSON(fiber.Map{"geofences": fences})
+}
+
+// CreateGeofence POST /api/v1/compliance/geofences
+func (h *Handler) CreateGeofence(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid tenant")
+	}
+	var in geofenceInput
+	if err := c.BodyParser(&in); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+	if err := in.validate(); err != nil {
+		return err
+	}
+	enabled := true
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
+	g := &store.Geofence{
+		TenantID:     tid,
+		Name:         in.Name,
+		Description:  in.Description,
+		Kind:         in.Kind,
+		Coordinates:  in.Coordinates,
+		CenterLat:    in.CenterLat,
+		CenterLng:    in.CenterLng,
+		RadiusMeters: in.RadiusMeters,
+		Action:       in.Action,
+		Color:        in.Color,
+		Enabled:      enabled,
+		CreatedBy:    userID(c),
+	}
+	if err := h.store.CreateGeofence(c.Context(), g); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.Status(fiber.StatusCreated).JSON(g)
+}
+
+// UpdateGeofence PUT /api/v1/compliance/geofences/:id
+func (h *Handler) UpdateGeofence(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid tenant")
+	}
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	existing, err := h.store.GetGeofence(c.Context(), id, tid)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fiber.NewError(fiber.StatusNotFound, "geofence not found")
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	var in geofenceInput
+	if err := c.BodyParser(&in); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+	if err := in.validate(); err != nil {
+		return err
+	}
+	enabled := existing.Enabled
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
+	existing.Name = in.Name
+	existing.Description = in.Description
+	existing.Kind = in.Kind
+	existing.Coordinates = in.Coordinates
+	existing.CenterLat = in.CenterLat
+	existing.CenterLng = in.CenterLng
+	existing.RadiusMeters = in.RadiusMeters
+	existing.Action = in.Action
+	existing.Color = in.Color
+	existing.Enabled = enabled
+	if err := h.store.UpdateGeofence(c.Context(), existing); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(existing)
+}
+
+// DeleteGeofence DELETE /api/v1/compliance/geofences/:id
+func (h *Handler) DeleteGeofence(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid tenant")
+	}
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	if err := h.store.DeleteGeofence(c.Context(), id, tid); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// ListGeofenceEvents GET /api/v1/compliance/geofences/events
+func (h *Handler) ListGeofenceEvents(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid tenant")
+	}
+	limit := c.QueryInt("limit", 100)
+	if limit > 500 {
+		limit = 500
+	}
+	events, err := h.store.ListGeofenceEvents(c.Context(), tid, limit)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if events == nil {
+		events = []store.GeofenceEvent{}
+	}
+	return c.JSON(fiber.Map{"events": events})
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
 // ListEvents GET /api/v1/compliance/events?device_id=...&rule_id=...&limit=50
 func (h *Handler) ListEvents(c *fiber.Ctx) error {
 	tid, err := tenantID(c)

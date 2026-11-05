@@ -15,6 +15,8 @@
     "@tanstack/react-table": "^8.20.5",
     "axios": "^1.7.7",
     "clsx": "^2.1.1",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1",
     "lucide-react": "^0.441.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.16.5",
+    "@types/leaflet": "^1.9.14",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

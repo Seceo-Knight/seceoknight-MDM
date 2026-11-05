@@ -70,6 +70,13 @@ func main() {
 	// Events log — readable by anyone who can read commands/policies
 	api.Get("/events", middleware.RequirePermission(authz.PermCommandRead), h.ListEvents)
 
+	// Geofences — virtual geographic boundaries with auto-enforcement actions
+	api.Get("/geofences",           middleware.RequirePermission(authz.PermPolicyRead),  h.ListGeofences)
+	api.Post("/geofences",          middleware.RequirePermission(authz.PermPolicyWrite), h.CreateGeofence)
+	api.Put("/geofences/:id",       middleware.RequirePermission(authz.PermPolicyWrite), h.UpdateGeofence)
+	api.Delete("/geofences/:id",    middleware.RequirePermission(authz.PermPolicyWrite), h.DeleteGeofence)
+	api.Get("/geofences/events",    middleware.RequirePermission(authz.PermPolicyRead),  h.ListGeofenceEvents)
+
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())

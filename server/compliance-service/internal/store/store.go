@@ -198,3 +198,117 @@ func (s *Store) ListEvents(ctx context.Context, tenantID uuid.UUID, deviceID *uu
 
 // ErrNotFound is a convenience alias for callers that need to distinguish missing rows.
 var ErrNotFound = sql.ErrNoRows
+
+// ─── Geofences ────────────────────────────────────────────────────────────────
+
+// Geofence is a named geographic boundary with an associated enforcement action.
+type Geofence struct {
+	ID           uuid.UUID `db:"id"            json:"id"`
+	TenantID     uuid.UUID `db:"tenant_id"     json:"tenant_id"`
+	Name         string    `db:"name"          json:"name"`
+	Description  string    `db:"description"   json:"description"`
+	Kind         string    `db:"kind"          json:"kind"`
+	Coordinates  []byte    `db:"coordinates"   json:"coordinates"` // raw JSONB
+	CenterLat    float64   `db:"center_lat"    json:"center_lat"`
+	CenterLng    float64   `db:"center_lng"    json:"center_lng"`
+	RadiusMeters int       `db:"radius_meters" json:"radius_meters"`
+	Action       string    `db:"action"        json:"action"`
+	Color        string    `db:"color"         json:"color"`
+	Enabled      bool      `db:"enabled"       json:"enabled"`
+	CreatedBy    *uuid.UUID `db:"created_by"   json:"created_by,omitempty"`
+	CreatedAt    time.Time `db:"created_at"    json:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"    json:"updated_at"`
+}
+
+// GeofenceEvent is a recorded entry/exit violation.
+type GeofenceEvent struct {
+	ID          uuid.UUID `db:"id"           json:"id"`
+	TenantID    uuid.UUID `db:"tenant_id"    json:"tenant_id"`
+	GeofenceID  uuid.UUID `db:"geofence_id"  json:"geofence_id"`
+	DeviceID    uuid.UUID `db:"device_id"    json:"device_id"`
+	EventType   string    `db:"event_type"   json:"event_type"`
+	DeviceLat   *float64  `db:"device_lat"   json:"device_lat,omitempty"`
+	DeviceLng   *float64  `db:"device_lng"   json:"device_lng,omitempty"`
+	ActionTaken string    `db:"action_taken" json:"action_taken"`
+	Note        string    `db:"note"         json:"note"`
+	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
+}
+
+func (s *Store) ListGeofences(ctx context.Context, tenantID uuid.UUID) ([]Geofence, error) {
+	var out []Geofence
+	err := s.db.SelectContext(ctx, &out, `
+		SELECT id, tenant_id, name, description, kind, coordinates,
+		       center_lat, center_lng, radius_meters, action, color,
+		       enabled, created_by, created_at, updated_at
+		FROM geofences WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
+	return out, err
+}
+
+func (s *Store) GetGeofence(ctx context.Context, id, tenantID uuid.UUID) (*Geofence, error) {
+	g := &Geofence{}
+	err := s.db.GetContext(ctx, g, `
+		SELECT id, tenant_id, name, description, kind, coordinates,
+		       center_lat, center_lng, radius_meters, action, color,
+		       enabled, created_by, created_at, updated_at
+		FROM geofences WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func (s *Store) CreateGeofence(ctx context.Context, g *Geofence) error {
+	return s.db.QueryRowContext(ctx, `
+		INSERT INTO geofences
+		  (tenant_id, name, description, kind, coordinates,
+		   center_lat, center_lng, radius_meters, action, color, enabled, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		RETURNING id, created_at, updated_at`,
+		g.TenantID, g.Name, g.Description, g.Kind, g.Coordinates,
+		g.CenterLat, g.CenterLng, g.RadiusMeters, g.Action, g.Color,
+		g.Enabled, g.CreatedBy,
+	).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt)
+}
+
+func (s *Store) UpdateGeofence(ctx context.Context, g *Geofence) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE geofences SET
+		  name=$1, description=$2, kind=$3, coordinates=$4,
+		  center_lat=$5, center_lng=$6, radius_meters=$7,
+		  action=$8, color=$9, enabled=$10, updated_at=now()
+		WHERE id=$11 AND tenant_id=$12`,
+		g.Name, g.Description, g.Kind, g.Coordinates,
+		g.CenterLat, g.CenterLng, g.RadiusMeters,
+		g.Action, g.Color, g.Enabled, g.ID, g.TenantID)
+	return err
+}
+
+func (s *Store) DeleteGeofence(ctx context.Context, id, tenantID uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM geofences WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	return err
+}
+
+func (s *Store) ListGeofenceEvents(ctx context.Context, tenantID uuid.UUID, limit int) ([]GeofenceEvent, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var out []GeofenceEvent
+	err := s.db.SelectContext(ctx, &out, `
+		SELECT id, tenant_id, geofence_id, device_id, event_type,
+		       device_lat, device_lng, action_taken, note, created_at
+		FROM geofence_events WHERE tenant_id = $1
+		ORDER BY created_at DESC LIMIT $2`, tenantID, limit)
+	return out, err
+}
+
+func (s *Store) InsertGeofenceEvent(ctx context.Context, e *GeofenceEvent) error {
+	return s.db.QueryRowContext(ctx, `
+		INSERT INTO geofence_events
+		  (tenant_id, geofence_id, device_id, event_type,
+		   device_lat, device_lng, action_taken, note)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING id, created_at`,
+		e.TenantID, e.GeofenceID, e.DeviceID, e.EventType,
+		e.DeviceLat, e.DeviceLng, e.ActionTaken, e.Note,
+	).Scan(&e.ID, &e.CreatedAt)
+}

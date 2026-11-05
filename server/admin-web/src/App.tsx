@@ -19,6 +19,7 @@ import { TimeTravel } from './pages/TimeTravel';
 import { Settings } from './pages/Settings';
 import { ComplianceRules } from './pages/ComplianceRules';
 import { AlertChannels } from './pages/AlertChannels';
+import { Geofencing } from './pages/Geofencing';
 
 function Private({ children }: { children: React.ReactNode }) {
   const token = useAuth(s => s.accessToken);
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="/apps" element={<Apps />} />
                 <Route path="/enrollment" element={<Enrollment />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/geofencing" element={<Geofencing />} />
                 <Route path="/compliance" element={<ComplianceRules />} />
                 <Route path="/alerts" element={<AlertChannels />} />
                 <Route path="/audit" element={<Audit />} />

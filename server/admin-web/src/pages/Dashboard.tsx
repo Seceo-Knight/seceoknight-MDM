@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { listDevices, deviceLabel } from '../api/devices';
 import { listPolicies } from '../api/policies';
 import { listUsers } from '../api/auth';
+import { listGeofences } from '../api/geofences';
 import { useEventStream } from '../hooks/useWebSocket';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isOnline, formatRelative } from '../components/online';
@@ -10,7 +11,7 @@ import { api } from '../api/client';
 import { DeviceMap } from '../components/DeviceMap';
 import { Stat, Panel, Badge, EmptyState, PageHero, HeroStat, Button, Hairline } from '../components/ui';
 import { Donut, MiniBars, chartColor } from '../components/charts';
-import { Smartphone, Wifi, ShieldCheck, Activity as ActivityIcon, Layers, Radio, MapPin, Gauge, Cpu, ShieldAlert } from 'lucide-react';
+import { Smartphone, Wifi, ShieldCheck, Activity as ActivityIcon, Layers, Radio, MapPin, Gauge, Cpu, ShieldAlert, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface AuditRow { id: string; actor_kind: string; actor_id?: string; action: string; target_id?: string; metadata?: Record<string, unknown>; created_at: string }
 
@@ -22,6 +23,7 @@ export function Dashboard() {
   const { data: devices } = useQuery({ queryKey: ['devices', 'all'], queryFn: () => listDevices({ limit: 500 }), refetchInterval: 10000 });
   const { data: policies } = useQuery({ queryKey: ['policies'], queryFn: listPolicies });
   const { data: users } = useQuery({ queryKey: ['tenant-users'], queryFn: listUsers, retry: false, staleTime: 60_000 });
+  const { data: geofences = [] } = useQuery({ queryKey: ['geofences'], queryFn: listGeofences, staleTime: 30_000 });
   const { data: audit } = useQuery({
     queryKey: ['audit', 'dashboard'],
     queryFn: async () => (await api.get<{ items: AuditRow[] }>('/api/v1/audit?limit=200')).data.items,
@@ -61,6 +63,17 @@ export function Dashboard() {
     osCounts[os] = (osCounts[os] ?? 0) + 1;
   }
   const compliantPct = items.length ? Math.round((posture.compliant / items.length) * 100) : 0;
+
+  // ── Security Score (0-100) ─────────────────────────────────────────────────
+  // Weighted composite of posture health, online ratio, and policy coverage.
+  const securityScore = useMemo(() => {
+    if (items.length === 0) return null;
+    const postureScore = compliantPct;                                        // 60% weight
+    const onlineScore  = Math.round((online / items.length) * 100);           // 20% weight
+    const policyScore  = (policies?.length ?? 0) > 0 ? 100 : 0;             // 10% weight
+    const geoScore     = geofences.filter(g => g.enabled).length > 0 ? 100 : 50; // 10% weight
+    return Math.round(postureScore * 0.6 + onlineScore * 0.2 + policyScore * 0.1 + geoScore * 0.1);
+  }, [compliantPct, online, items.length, policies?.length, geofences]);
   const osTop = Object.entries(osCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const osMax = Math.max(1, ...osTop.map(([, n]) => n));
 
@@ -89,6 +102,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Security score ribbon — always visible, theme-aware threat-level indicator */}
+      {securityScore !== null && <SecurityRibbon score={securityScore} critical={posture.critical} atRisk={posture.atRisk} geofences={geofences.filter(g => g.enabled).length} />}
+
       {/* Command-center hero */}
       <PageHero
         icon={ShieldCheck}
@@ -333,6 +349,88 @@ function Legend({ color, label, value, capitalize }: { color: string; label: str
       </span>
       <span className="font-semibold text-fg tabular-nums">{value}</span>
     </li>
+  );
+}
+
+// ── Security Score ribbon ─────────────────────────────────────────────────────
+function SecurityRibbon({ score, critical, atRisk, geofences }: { score: number; critical: number; atRisk: number; geofences: number }) {
+  const level = score >= 80 ? 'good' : score >= 60 ? 'moderate' : score >= 40 ? 'elevated' : 'critical';
+  const levelMeta = {
+    good:     { label: 'Good',     bar: 'from-success to-emerald-400',  ring: 'ring-success/30', text: 'text-success',  bg: 'bg-success-soft' },
+    moderate: { label: 'Moderate', bar: 'from-warn to-amber-400',       ring: 'ring-warn/30',    text: 'text-warn',    bg: 'bg-warn-soft' },
+    elevated: { label: 'Elevated', bar: 'from-orange-500 to-warn',      ring: 'ring-orange-400/30', text: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-950/40' },
+    critical: { label: 'Critical', bar: 'from-danger to-rose-400',      ring: 'ring-danger/30',  text: 'text-danger',  bg: 'bg-danger-soft' },
+  }[level];
+  const TrendIcon = score >= 80 ? TrendingUp : score >= 60 ? Minus : TrendingDown;
+
+  return (
+    <div className={`relative flex flex-wrap items-center gap-4 rounded-2xl border border-line px-5 py-4 ${levelMeta.bg} ring-1 ring-inset ${levelMeta.ring} animate-fadein overflow-hidden`}>
+      {/* Background gradient glow */}
+      <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-transparent opacity-30" />
+      {/* Score dial */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="relative w-14 h-14 shrink-0">
+          <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" strokeWidth="4" className="text-line" />
+            <circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" strokeWidth="4"
+              className={levelMeta.text}
+              strokeDasharray={`${2 * Math.PI * 22}`}
+              strokeDashoffset={`${2 * Math.PI * 22 * (1 - score / 100)}`}
+              strokeLinecap="round"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={`text-sm font-bold leading-none tabular-nums ${levelMeta.text}`}>{score}</span>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-fg">Security Score</span>
+            <TrendIcon size={13} className={levelMeta.text} />
+          </div>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold ring-1 ring-inset ${levelMeta.text} ${levelMeta.bg} ${levelMeta.ring}`}>
+            {levelMeta.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="h-8 w-px bg-line hidden sm:block shrink-0" />
+
+      {/* Score bar */}
+      <div className="flex-1 min-w-[140px]">
+        <div className="h-2 rounded-full bg-line overflow-hidden">
+          <div className={`h-full rounded-full bg-gradient-to-r ${levelMeta.bar} transition-[width] duration-700 ease-out`} style={{ width: `${score}%` }} />
+        </div>
+        <div className="flex justify-between text-2xs text-faint mt-1 tabular-nums">
+          <span>0</span><span>50</span><span>100</span>
+        </div>
+      </div>
+
+      <div className="h-8 w-px bg-line hidden lg:block shrink-0" />
+
+      {/* Quick facts */}
+      <div className="flex items-center gap-5 shrink-0">
+        {critical > 0 && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="w-2 h-2 rounded-full bg-danger" />
+            <span className="text-danger font-semibold tabular-nums">{critical}</span>
+            <span className="text-muted">critical</span>
+          </div>
+        )}
+        {atRisk > 0 && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <span className="w-2 h-2 rounded-full bg-warn" />
+            <span className="text-warn font-semibold tabular-nums">{atRisk}</span>
+            <span className="text-muted">at risk</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 text-sm">
+          <MapPin size={12} className="text-accent shrink-0" />
+          <span className="font-semibold tabular-nums text-fg">{geofences}</span>
+          <span className="text-muted">geofence{geofences !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
