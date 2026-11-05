@@ -303,6 +303,24 @@ services:
       - traefik.http.services.audit.loadbalancer.server.port=8008
     networks: [mdm]
 
+  compliance-service:
+    build:
+      context: .
+      dockerfile: compliance-service/Dockerfile
+    environment:
+      <<: *go-env
+      SERVICE_NAME: compliance-service
+      HTTP_PORT: "8009"
+      COMMAND_SERVICE_URL: "http://command-service:8004"
+    depends_on:
+      postgres:       {condition: service_healthy}
+      command-service: {condition: service_started}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.compliance.rule=PathPrefix(`/api/v1/compliance`)
+      - traefik.http.services.compliance.loadbalancer.server.port=8009
+    networks: [mdm]
+
   admin-web:
     build:
       context: ./admin-web
