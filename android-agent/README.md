@@ -1,10 +1,13 @@
-# CyberSentinel MDM — Android Agent
+# SeceoKnight MDM — Android Agent
 
-**Vendor:** Virtual Galaxy Infotech Ltd
+**Built by SeceoKnight Technologies**
 
-The on-device companion to the CyberSentinel MDM server. Built as a multi-module Gradle
+The on-device companion to the SeceoKnight MDM server. Built as a multi-module Gradle
 project so the heavy DPM / MQTT machinery stays out of the UI module and is
 trivially mockable in tests.
+
+> For the full APK build guide, signing keystore backup, and device enrollment steps,
+> see the [main README](../README.md).
 
 ## Modules
 
