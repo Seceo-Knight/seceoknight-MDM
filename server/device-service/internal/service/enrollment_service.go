@@ -203,7 +203,9 @@ func (s *EnrollmentService) BuildQRPayload(ctx context.Context, tokenID uuid.UUI
 	}
 	download := cfg.APKDownloadURL
 	if download == "" {
-		download = fmt.Sprintf("%s/api/v1/files/agent/latest.apk", base)
+		// Include the tenant ID so the public endpoint knows which tenant's APK
+		// to serve — Android Setup Wizard calls this without any auth token.
+		download = fmt.Sprintf("%s/api/v1/files/agent/latest.apk?tenant=%s", base, tok.TenantID.String())
 	}
 	extras := map[string]string{
 		"server_url":        base,

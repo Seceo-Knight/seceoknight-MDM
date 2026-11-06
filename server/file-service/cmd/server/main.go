@@ -57,6 +57,9 @@ func main() {
 	})
 	app.Use(middleware.RequestLogger(), middleware.Recover(), middleware.Metrics(cfg.ServiceName))
 	app.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
+	// Public endpoint — no JWT required. Android Setup Wizard calls this during
+	// QR provisioning before the device has any auth token. Tenant is in ?tenant=.
+	app.Get("/api/v1/files/agent/latest.apk", h.LatestAgentAPK)
 
 	g := app.Group("/api/v1/files", middleware.JWTAuth(issuer), middleware.TenantScope())
 	g.Get("/", middleware.RequirePermission(authz.PermFileRead), h.List)

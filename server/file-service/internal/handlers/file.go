@@ -237,6 +237,36 @@ func publicEndpointFromRequest(c *fiber.Ctx) string {
 	return proto + "://" + host
 }
 
+// LatestAgentAPK is a public (no-auth) redirect to the most recently uploaded
+// APK for a tenant. Android's Setup Wizard calls this URL during QR
+// provisioning — before the device has any auth token — so it must be
+// unauthenticated. The tenant is passed as a ?tenant=<uuid> query param that
+// the enrollment service embeds in the QR payload's android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION field.
+//
+// The redirect target is a 6-hour presigned MinIO URL so large APKs on slow
+// mobile connections finish downloading even with range retries.
+func (h *Handler) LatestAgentAPK(c *fiber.Ctx) error {
+	tenantStr := c.Query("tenant", "")
+	tenantID, err := uuid.Parse(tenantStr)
+	if err != nil || tenantID == uuid.Nil {
+		return c.Status(400).JSON(fiber.Map{"error": "tenant query param required (uuid)"})
+	}
+	files, err := h.repo.List(c.Context(), repository.ListFilter{TenantID: tenantID, Kind: "apk"})
+	if err != nil || len(files) == 0 {
+		return c.Status(404).JSON(fiber.Map{"error": "no agent APK uploaded for this tenant — go to Settings → Agent APK builds"})
+	}
+	// List returns newest-first (ORDER BY created_at DESC).
+	latest := files[0]
+	pubEndpoint := publicEndpointFromRequest(c)
+	const ttl = 6 * time.Hour
+	url, err := h.store.PresignDownloadFor(c.Context(), latest.StorageKey, ttl, pubEndpoint)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	// 302 redirect — the Setup Wizard follows redirects automatically.
+	return c.Redirect(url, fiber.StatusFound)
+}
+
 func (h *Handler) Delete(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
