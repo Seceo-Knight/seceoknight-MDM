@@ -15,6 +15,9 @@ type TelemetryRepo struct{ db *sqlx.DB }
 
 func NewTelemetryRepo(db *sqlx.DB) *TelemetryRepo { return &TelemetryRepo{db: db} }
 
+// DB returns the underlying sqlx.DB for direct queries (e.g. fleet aggregations).
+func (r *TelemetryRepo) DB() *sqlx.DB { return r.db }
+
 func (r *TelemetryRepo) Ingest(ctx context.Context, evs []models.TelemetryEvent) error {
 	if len(evs) == 0 {
 		return nil

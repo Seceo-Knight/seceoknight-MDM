@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -132,6 +133,95 @@ func (h *Handler) ListDeviceAnomalies(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"items": items})
+}
+
+// FleetApps aggregates app_inventory telemetry across all devices for a tenant.
+// Returns a list of {package_name, app_name, version_name, device_count, device_ids}
+// sorted by device_count descending.
+//   GET /api/v1/telemetry/fleet/apps?limit=500
+func (h *Handler) FleetApps(c *fiber.Ctx) error {
+	tenantStr, _ := c.Locals(middleware.CtxTenantID).(string)
+	tenantID, _ := uuid.Parse(tenantStr)
+	limit := c.QueryInt("limit", 500)
+	if limit > 2000 {
+		limit = 2000
+	}
+
+	// Pull latest app_inventory snapshot for every device in this tenant.
+	rows, err := h.repo.DB().QueryContext(c.Context(), `
+		SELECT device_id, payload
+		  FROM device_telemetry_latest
+		 WHERE tenant_id = $1 AND kind = 'app_inventory'`, tenantID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	defer rows.Close()
+
+	type appEntry struct {
+		PackageName string `json:"package_name"`
+		AppName     string `json:"app_name"`
+		VersionName string `json:"version_name,omitempty"`
+	}
+	type inventoryPayload struct {
+		Apps []appEntry `json:"apps"`
+	}
+
+	type appStat struct {
+		PackageName string   `json:"package_name"`
+		AppName     string   `json:"app_name"`
+		VersionName string   `json:"version_name,omitempty"`
+		DeviceCount int      `json:"device_count"`
+		DeviceIDs   []string `json:"device_ids"`
+	}
+	statsMap := map[string]*appStat{}
+
+	for rows.Next() {
+		var devID uuid.UUID
+		var payload json.RawMessage
+		if err := rows.Scan(&devID, &payload); err != nil {
+			continue
+		}
+		var inv inventoryPayload
+		if err := json.Unmarshal(payload, &inv); err != nil {
+			continue
+		}
+		for _, app := range inv.Apps {
+			if app.PackageName == "" {
+				continue
+			}
+			s, ok := statsMap[app.PackageName]
+			if !ok {
+				s = &appStat{
+					PackageName: app.PackageName,
+					AppName:     app.AppName,
+					VersionName: app.VersionName,
+				}
+				statsMap[app.PackageName] = s
+			}
+			s.DeviceCount++
+			s.DeviceIDs = append(s.DeviceIDs, devID.String())
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Convert map to sorted slice.
+	stats := make([]*appStat, 0, len(statsMap))
+	for _, s := range statsMap {
+		stats = append(stats, s)
+	}
+	// Sort by device_count desc, then package_name asc.
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].DeviceCount != stats[j].DeviceCount {
+			return stats[i].DeviceCount > stats[j].DeviceCount
+		}
+		return stats[i].PackageName < stats[j].PackageName
+	})
+	if len(stats) > limit {
+		stats = stats[:limit]
+	}
+	return c.JSON(fiber.Map{"items": stats, "total": len(statsMap)})
 }
 
 // ResolveAnomaly marks an anomaly as resolved.

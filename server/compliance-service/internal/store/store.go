@@ -312,3 +312,50 @@ func (s *Store) InsertGeofenceEvent(ctx context.Context, e *GeofenceEvent) error
 		e.DeviceLat, e.DeviceLng, e.ActionTaken, e.Note,
 	).Scan(&e.ID, &e.CreatedAt)
 }
+
+// ─── Package Blocklist ────────────────────────────────────────────────────────
+
+// BlockedPackage is an entry in the fleet-wide package blocklist.
+type BlockedPackage struct {
+	ID          uuid.UUID  `db:"id"           json:"id"`
+	TenantID    uuid.UUID  `db:"tenant_id"    json:"tenant_id"`
+	PackageName string     `db:"package_name" json:"package_name"`
+	DisplayName string     `db:"display_name" json:"display_name"`
+	Reason      string     `db:"reason"       json:"reason"`
+	CreatedBy   *uuid.UUID `db:"created_by"   json:"created_by,omitempty"`
+	CreatedAt   time.Time  `db:"created_at"   json:"created_at"`
+}
+
+func (s *Store) ListBlockedPackages(ctx context.Context, tenantID uuid.UUID) ([]BlockedPackage, error) {
+	var out []BlockedPackage
+	err := s.db.SelectContext(ctx, &out,
+		`SELECT * FROM fleet_blocked_packages WHERE tenant_id=$1 ORDER BY package_name ASC`, tenantID)
+	return out, err
+}
+
+func (s *Store) AddBlockedPackage(ctx context.Context, p BlockedPackage) (BlockedPackage, error) {
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO fleet_blocked_packages (tenant_id, package_name, display_name, reason, created_by)
+		VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (tenant_id, package_name) DO UPDATE
+		   SET display_name=EXCLUDED.display_name, reason=EXCLUDED.reason
+		RETURNING id, created_at`,
+		p.TenantID, p.PackageName, p.DisplayName, p.Reason, p.CreatedBy,
+	).Scan(&p.ID, &p.CreatedAt)
+	return p, err
+}
+
+func (s *Store) DeleteBlockedPackage(ctx context.Context, id, tenantID uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM fleet_blocked_packages WHERE id=$1 AND tenant_id=$2`, id, tenantID)
+	return err
+}
+
+// IsBlocked returns true if the given package name is on the tenant's blocklist.
+func (s *Store) IsBlocked(ctx context.Context, tenantID uuid.UUID, packageName string) (bool, error) {
+	var count int
+	err := s.db.GetContext(ctx, &count,
+		`SELECT COUNT(*) FROM fleet_blocked_packages WHERE tenant_id=$1 AND package_name=$2`,
+		tenantID, packageName)
+	return count > 0, err
+}

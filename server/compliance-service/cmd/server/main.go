@@ -77,6 +77,11 @@ func main() {
 	api.Delete("/geofences/:id",    middleware.RequirePermission(authz.PermPolicyWrite), h.DeleteGeofence)
 	api.Get("/geofences/events",    middleware.RequirePermission(authz.PermPolicyRead),  h.ListGeofenceEvents)
 
+	// Package blocklist — fleet-wide app block management
+	api.Get("/blocklist",         middleware.RequirePermission(authz.PermPolicyRead),  h.ListBlockedPackages)
+	api.Post("/blocklist",        middleware.RequirePermission(authz.PermPolicyWrite), h.AddBlockedPackage)
+	api.Delete("/blocklist/:id",  middleware.RequirePermission(authz.PermPolicyWrite), h.DeleteBlockedPackage)
+
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())

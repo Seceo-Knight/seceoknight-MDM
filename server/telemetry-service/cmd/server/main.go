@@ -75,6 +75,11 @@ func main() {
 		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
 		h.Events)
 
+	// Fleet-wide aggregated app inventory
+	app.Get("/api/v1/telemetry/fleet/apps",
+		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
+		h.FleetApps)
+
 	// AI Anomaly Detection endpoints
 	app.Get("/api/v1/telemetry/anomalies",
 		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),

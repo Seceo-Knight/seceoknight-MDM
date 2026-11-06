@@ -402,3 +402,73 @@ func (h *Handler) ListEvents(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"events": events})
 }
+
+// ─── Package Blocklist ────────────────────────────────────────────────────────
+
+// ListBlockedPackages returns all blocked packages for the tenant.
+//   GET /api/v1/compliance/blocklist
+func (h *Handler) ListBlockedPackages(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing tenant")
+	}
+	items, err := h.store.ListBlockedPackages(c.Context(), tid)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if items == nil {
+		items = []store.BlockedPackage{}
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+// AddBlockedPackage adds a package to the blocklist.
+//   POST /api/v1/compliance/blocklist
+//   { "package_name": "com.evil.app", "display_name": "Evil App", "reason": "malware" }
+func (h *Handler) AddBlockedPackage(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing tenant")
+	}
+	var body struct {
+		PackageName string `json:"package_name"`
+		DisplayName string `json:"display_name"`
+		Reason      string `json:"reason"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+	if body.PackageName == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "package_name is required")
+	}
+	uid := userID(c)
+	pkg := store.BlockedPackage{
+		TenantID:    tid,
+		PackageName: body.PackageName,
+		DisplayName: body.DisplayName,
+		Reason:      body.Reason,
+		CreatedBy:   uid,
+	}
+	created, err := h.store.AddBlockedPackage(c.Context(), pkg)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.Status(fiber.StatusCreated).JSON(created)
+}
+
+// DeleteBlockedPackage removes a package from the blocklist.
+//   DELETE /api/v1/compliance/blocklist/:id
+func (h *Handler) DeleteBlockedPackage(c *fiber.Ctx) error {
+	tid, err := tenantID(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "missing tenant")
+	}
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+	if err := h.store.DeleteBlockedPackage(c.Context(), id, tid); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
