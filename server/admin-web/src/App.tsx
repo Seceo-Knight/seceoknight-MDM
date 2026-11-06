@@ -22,6 +22,7 @@ import { AlertChannels } from './pages/AlertChannels';
 import { Geofencing } from './pages/Geofencing';
 import { AIInsights } from './pages/AIInsights';
 import { Reports } from './pages/Reports';
+import { DevicesMap } from './pages/DevicesMap';
 
 function Private({ children }: { children: React.ReactNode }) {
   const token = useAuth(s => s.accessToken);
@@ -57,6 +58,7 @@ export default function App() {
                 <Route path="/apps" element={<Apps />} />
                 <Route path="/enrollment" element={<Enrollment />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/map" element={<DevicesMap />} />
                 <Route path="/geofencing" element={<Geofencing />} />
                 <Route path="/ai-insights" element={<AIInsights />} />
                 <Route path="/reports" element={<Reports />} />

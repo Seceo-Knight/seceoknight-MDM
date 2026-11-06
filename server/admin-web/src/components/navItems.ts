@@ -1,4 +1,4 @@
-import { Activity, Smartphone, Users, Shield, Box, History, QrCode, FileText, KeyRound, Settings, UserCheck, ShieldAlert, Bell, MapPin, Brain, FileDown } from 'lucide-react';
+import { Activity, Smartphone, Users, Shield, Box, History, QrCode, FileText, KeyRound, Settings, UserCheck, ShieldAlert, Bell, MapPin, Brain, FileDown, Map } from 'lucide-react';
 
 // Single source of truth for navigable pages — consumed by the sidebar
 // (Layout) and the ⌘K command palette.
@@ -10,6 +10,7 @@ export const nav: NavItem[] = [
   { to: '/groups',      label: 'Groups',      Icon: Users,      section: 'fleet' },
   { to: '/policies',    label: 'Policies',    Icon: Shield,     section: 'fleet' },
   { to: '/apps',        label: 'Apps',        Icon: Box,        section: 'fleet' },
+  { to: '/map',         label: 'Live Map',    Icon: Map,         section: 'fleet' },
   { to: '/geofencing',  label: 'Geofencing',  Icon: MapPin,      section: 'fleet' },
   { to: '/ai-insights', label: 'AI Insights', Icon: Brain,       section: 'fleet' },
   { to: '/reports',     label: 'Reports',     Icon: FileDown,    section: 'ops' },

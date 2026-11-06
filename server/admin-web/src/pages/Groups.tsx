@@ -8,7 +8,7 @@ import { toast } from '../components/toast';
 import { Card, Button, IconButton, Badge, Panel, SectionHeading, Field, Input, Textarea, Select, PageHero, HeroStat, Hairline, Modal, ModalHeader, ModalBody, ModalFooter } from '../components/ui';
 import { confirmDialog } from '../components/confirm';
 import { Donut, chartColor } from '../components/charts';
-import { Layers, Smartphone, ShieldCheck, Plus, Users, MessageSquare, Pencil, Trash2, FileCheck2, X, Send, PieChart } from 'lucide-react';
+import { Layers, Smartphone, ShieldCheck, Plus, Users, MessageSquare, Pencil, Trash2, FileCheck2, X, Send, PieChart, Lock, Power, RefreshCw, Radio, Bell } from 'lucide-react';
 
 export function Groups() {
   const qc = useQueryClient();
@@ -367,6 +367,11 @@ function GroupCard({ group, index, canEdit, canAssign, canMessage, policyOptions
         )}
       </div>
 
+      {/* ── Group bulk actions ── */}
+      {canMessage && group.device_count > 0 && (
+        <GroupActions group={group} />
+      )}
+
       {msgOpen && (
         <Modal onClose={() => setMsgOpen(false)} label={`Message everyone in ${group.name}`} width="max-w-md">
           <ModalHeader
@@ -398,5 +403,114 @@ function GroupCard({ group, index, canEdit, canAssign, canMessage, policyOptions
         </Modal>
       )}
     </Card>
+  );
+}
+
+// ─── Group bulk action buttons ───────────────────────────────────────────────
+
+type BulkAction = {
+  kind: string;
+  label: string;
+  icon: React.ReactNode;
+  confirm: (groupName: string, count: number) => { title: string; message: string };
+  payload?: Record<string, unknown>;
+  danger?: boolean;
+};
+
+const BULK_ACTIONS: BulkAction[] = [
+  {
+    kind: 'SYNC_POLICY',
+    label: 'Sync policy',
+    icon: <RefreshCw size={13} />,
+    confirm: (n, c) => ({
+      title: `Sync policy on ${n}?`,
+      message: `Sends SYNC_POLICY to all ${c} device${c === 1 ? '' : 's'} — each will re-fetch and re-apply the latest assigned policy.`,
+    }),
+  },
+  {
+    kind: 'PUSH_TELEMETRY',
+    label: 'Push telemetry',
+    icon: <Radio size={13} />,
+    confirm: (n, c) => ({
+      title: `Request telemetry from ${n}?`,
+      message: `Sends PUSH_TELEMETRY to ${c} device${c === 1 ? '' : 's'} — each will immediately upload a fresh heartbeat snapshot.`,
+    }),
+  },
+  {
+    kind: 'PLAY_SOUND',
+    label: 'Ring devices',
+    icon: <Bell size={13} />,
+    confirm: (n, c) => ({
+      title: `Ring all devices in ${n}?`,
+      message: `Plays a loud alert on ${c} device${c === 1 ? '' : 's'}. Use to locate misplaced devices.`,
+    }),
+    payload: { duration_ms: 10000 },
+  },
+  {
+    kind: 'LOCK',
+    label: 'Lock all',
+    icon: <Lock size={13} />,
+    danger: true,
+    confirm: (n, c) => ({
+      title: `Lock all devices in ${n}?`,
+      message: `Locks the screen on ${c} device${c === 1 ? '' : 's'} immediately. Users will need their PIN to unlock.`,
+    }),
+  },
+  {
+    kind: 'REBOOT',
+    label: 'Reboot all',
+    icon: <Power size={13} />,
+    danger: true,
+    confirm: (n, c) => ({
+      title: `Reboot all devices in ${n}?`,
+      message: `Reboots ${c} device${c === 1 ? '' : 's'}. All running apps will close. Device Owner only — others will silently skip.`,
+    }),
+  },
+];
+
+function GroupActions({ group }: { group: DeviceGroup }) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const fire = async (action: BulkAction) => {
+    const { title, message } = action.confirm(group.name, group.device_count);
+    const ok = await confirmDialog({ title, message, confirmLabel: action.label });
+    if (!ok) return;
+    setBusy(action.kind);
+    try {
+      const n = await broadcastCommand(group.id, action.kind, action.payload ?? {});
+      toast.success(`${action.label}: dispatched to ${n} device${n === 1 ? '' : 's'}`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || `${action.label} failed`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="border-t border-line pt-3">
+      <SectionHeading
+        icon={Layers}
+        title="Group actions"
+        hint="Apply a command to every device in this group at once."
+        className="mb-2.5"
+      />
+      <div className="flex flex-wrap gap-1.5">
+        {BULK_ACTIONS.map(a => (
+          <button
+            key={a.kind}
+            disabled={busy !== null}
+            onClick={() => fire(a)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              a.danger
+                ? 'border-danger/30 bg-danger/5 text-danger hover:bg-danger/15'
+                : 'border-line bg-surface-2 text-fg hover:bg-surface-3'
+            }`}
+          >
+            {busy === a.kind ? <RefreshCw size={12} className="animate-spin" /> : a.icon}
+            {busy === a.kind ? `${a.label}…` : a.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
