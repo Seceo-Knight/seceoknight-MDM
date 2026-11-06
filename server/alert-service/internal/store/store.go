@@ -36,6 +36,8 @@ type Channel struct {
 	OnComplianceTrigger bool `db:"on_compliance_trigger" json:"on_compliance_trigger"`
 	OnDeviceOffline     bool `db:"on_device_offline"     json:"on_device_offline"`
 	OnPostureDrop       bool `db:"on_posture_drop"       json:"on_posture_drop"`
+	OnAnomalyCritical   bool `db:"on_anomaly_critical"   json:"on_anomaly_critical"`
+	OnAnomalyWarning    bool `db:"on_anomaly_warning"    json:"on_anomaly_warning"`
 
 	Enabled   bool       `db:"enabled"    json:"enabled"`
 	CreatedBy *uuid.UUID `db:"created_by" json:"created_by,omitempty"`
@@ -71,6 +73,7 @@ func (s *Store) ListChannels(ctx context.Context, tenantID uuid.UUID) ([]Channel
 		       smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_from, smtp_to,
 		       webhook_url, webhook_secret,
 		       on_compliance_trigger, on_device_offline, on_posture_drop,
+		       on_anomaly_critical, on_anomaly_warning,
 		       enabled, created_by, created_at, updated_at
 		FROM notification_channels WHERE tenant_id=$1 ORDER BY created_at DESC`, tenantID)
 	return out, err
@@ -83,6 +86,7 @@ func (s *Store) GetChannel(ctx context.Context, id, tenantID uuid.UUID) (*Channe
 		       smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_from, smtp_to,
 		       webhook_url, webhook_secret,
 		       on_compliance_trigger, on_device_offline, on_posture_drop,
+		       on_anomaly_critical, on_anomaly_warning,
 		       enabled, created_by, created_at, updated_at
 		FROM notification_channels WHERE id=$1 AND tenant_id=$2`, id, tenantID)
 	return c, err
@@ -95,13 +99,15 @@ func (s *Store) CreateChannel(ctx context.Context, c *Channel) error {
 		   smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_from, smtp_to,
 		   webhook_url, webhook_secret,
 		   on_compliance_trigger, on_device_offline, on_posture_drop,
+		   on_anomaly_critical, on_anomaly_warning,
 		   enabled, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		RETURNING id, created_at, updated_at`,
 		c.TenantID, c.Name, c.Kind,
 		c.SMTPHost, c.SMTPPort, c.SMTPTLS, c.SMTPUser, c.SMTPPass, c.SMTPFrom, c.SMTPTo,
 		c.WebhookURL, c.WebhookSecret,
 		c.OnComplianceTrigger, c.OnDeviceOffline, c.OnPostureDrop,
+		c.OnAnomalyCritical, c.OnAnomalyWarning,
 		c.Enabled, c.CreatedBy,
 	).Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
 }
@@ -114,13 +120,15 @@ func (s *Store) UpdateChannel(ctx context.Context, c *Channel) error {
 		  smtp_from=$8, smtp_to=$9,
 		  webhook_url=$10, webhook_secret=$11,
 		  on_compliance_trigger=$12, on_device_offline=$13, on_posture_drop=$14,
-		  enabled=$15
-		WHERE id=$16 AND tenant_id=$17`,
+		  on_anomaly_critical=$15, on_anomaly_warning=$16,
+		  enabled=$17
+		WHERE id=$18 AND tenant_id=$19`,
 		c.Name, c.Kind,
 		c.SMTPHost, c.SMTPPort, c.SMTPTLS, c.SMTPUser, c.SMTPPass,
 		c.SMTPFrom, c.SMTPTo,
 		c.WebhookURL, c.WebhookSecret,
 		c.OnComplianceTrigger, c.OnDeviceOffline, c.OnPostureDrop,
+		c.OnAnomalyCritical, c.OnAnomalyWarning,
 		c.Enabled, c.ID, c.TenantID)
 	return err
 }
@@ -144,6 +152,7 @@ func (s *Store) EnabledChannelsForEvent(ctx context.Context, tenantID uuid.UUID,
 		       smtp_host, smtp_port, smtp_tls, smtp_user, smtp_pass, smtp_from, smtp_to,
 		       webhook_url, webhook_secret,
 		       on_compliance_trigger, on_device_offline, on_posture_drop,
+		       on_anomaly_critical, on_anomaly_warning,
 		       enabled, created_by, created_at, updated_at
 		FROM notification_channels
 		WHERE tenant_id=$1 AND enabled=TRUE AND %s=TRUE`, col), tenantID)
@@ -158,6 +167,10 @@ func eventTypeColumn(et string) string {
 		return "on_device_offline"
 	case "posture_drop":
 		return "on_posture_drop"
+	case "anomaly_critical":
+		return "on_anomaly_critical"
+	case "anomaly_warning":
+		return "on_anomaly_warning"
 	}
 	return ""
 }

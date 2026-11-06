@@ -14,10 +14,13 @@
 package anomaly
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -32,14 +35,19 @@ const (
 
 // Engine runs the anomaly detection loop.
 type Engine struct {
-	store    *Store
-	interval time.Duration
+	store          *Store
+	interval       time.Duration
+	alertServiceURL string
 }
 
 // New creates an Engine. interval controls how often the analysis runs
 // (5 * time.Minute in production).
 func New(store *Store, interval time.Duration) *Engine {
-	return &Engine{store: store, interval: interval}
+	alertURL := os.Getenv("ALERT_SERVICE_URL")
+	if alertURL == "" {
+		alertURL = "http://alert-service:8010"
+	}
+	return &Engine{store: store, interval: interval, alertServiceURL: alertURL}
 }
 
 // Run starts the background goroutine. It returns immediately.
@@ -330,6 +338,54 @@ func (e *Engine) maybeInsert(ctx context.Context, d DeviceRow, anomalyType, seve
 		Str("severity", severity).
 		Float64("z_score", z).
 		Msg("anomaly: detected")
+	// Fire alert notification asynchronously (best-effort).
+	go e.notifyAnomaly(d.TenantID.String(), d.ID.String(), anomalyType, severity, z, description)
+}
+
+type anomalyAlertRequest struct {
+	TenantID  string         `json:"tenant_id"`
+	EventType string         `json:"event_type"`
+	Subject   string         `json:"subject"`
+	Data      map[string]any `json:"data"`
+}
+
+// notifyAnomaly fires POST /internal/notify to alert-service (best-effort).
+func (e *Engine) notifyAnomaly(tenantID, deviceID, anomalyType, severity string, z float64, description string) {
+	eventType := "anomaly_warning"
+	if severity == "critical" {
+		eventType = "anomaly_critical"
+	}
+	payload := anomalyAlertRequest{
+		TenantID:  tenantID,
+		EventType: eventType,
+		Subject:   fmt.Sprintf("AI anomaly [%s]: %s", severity, description),
+		Data: map[string]any{
+			"device_id":    deviceID,
+			"anomaly_type": anomalyType,
+			"severity":     severity,
+			"z_score":      fmt.Sprintf("%.2f", z),
+			"description":  description,
+		},
+	}
+	body, _ := json.Marshal(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		e.alertServiceURL+"/internal/notify", bytes.NewReader(body))
+	if err != nil {
+		log.Warn().Err(err).Msg("anomaly alert: build request failed")
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		log.Warn().Err(err).Msg("anomaly alert: request failed")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		log.Warn().Int("status", resp.StatusCode).Msg("anomaly alert: non-2xx response")
+	}
 }
 
 // meanStd computes the mean and population standard deviation of a slice.

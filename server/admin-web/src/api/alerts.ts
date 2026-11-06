@@ -19,6 +19,8 @@ export interface AlertChannel {
   on_compliance_trigger: boolean;
   on_device_offline: boolean;
   on_posture_drop: boolean;
+  on_anomaly_critical: boolean;
+  on_anomaly_warning: boolean;
   enabled: boolean;
   created_by?: string;
   created_at: string;
@@ -40,6 +42,8 @@ export interface ChannelInput {
   on_compliance_trigger?: boolean;
   on_device_offline?: boolean;
   on_posture_drop?: boolean;
+  on_anomaly_critical?: boolean;
+  on_anomaly_warning?: boolean;
   enabled?: boolean;
 }
 

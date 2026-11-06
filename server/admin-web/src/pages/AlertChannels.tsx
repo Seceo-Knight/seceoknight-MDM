@@ -23,6 +23,8 @@ const emptyEmailForm = (): ChannelInput => ({
   on_compliance_trigger: true,
   on_device_offline: false,
   on_posture_drop: false,
+  on_anomaly_critical: true,
+  on_anomaly_warning: false,
   enabled: true,
 });
 
@@ -34,6 +36,8 @@ const emptyWebhookForm = (): ChannelInput => ({
   on_compliance_trigger: true,
   on_device_offline: false,
   on_posture_drop: false,
+  on_anomaly_critical: true,
+  on_anomaly_warning: false,
   enabled: true,
 });
 
@@ -53,6 +57,8 @@ function channelToInput(ch: AlertChannel): ChannelInput {
     on_compliance_trigger: ch.on_compliance_trigger,
     on_device_offline: ch.on_device_offline,
     on_posture_drop: ch.on_posture_drop,
+    on_anomaly_critical: ch.on_anomaly_critical,
+    on_anomaly_warning: ch.on_anomaly_warning,
     enabled: ch.enabled,
   };
 }
@@ -226,9 +232,11 @@ function ChannelForm({
             <p className="text-xs font-medium text-muted mb-2">Notify on these events</p>
             <div className="space-y-2">
               {[
-                { key: 'on_compliance_trigger', label: 'Compliance rule fired', desc: 'A rule evaluated to true and an action was dispatched' },
-                { key: 'on_device_offline',     label: 'Device went offline',   desc: 'A device has not sent a heartbeat in the expected window' },
-                { key: 'on_posture_drop',       label: 'Posture score dropped',  desc: 'A device posture score decreased significantly' },
+                { key: 'on_compliance_trigger', label: 'Compliance rule fired',    desc: 'A rule evaluated to true and an action was dispatched' },
+                { key: 'on_device_offline',     label: 'Device went offline',     desc: 'A device has not sent a heartbeat in the expected window' },
+                { key: 'on_posture_drop',       label: 'Posture score dropped',   desc: 'A device posture score decreased significantly' },
+                { key: 'on_anomaly_critical',   label: 'AI anomaly — critical',   desc: 'AI engine detected a critical anomaly (Z-score ≥ 3.0σ)' },
+                { key: 'on_anomaly_warning',    label: 'AI anomaly — warning',    desc: 'AI engine detected a warning anomaly (Z-score ≥ 2.0σ)' },
               ].map(ev => (
                 <label key={ev.key} className="flex items-start gap-3 cursor-pointer select-none rounded-lg border border-line bg-surface-2 px-4 py-3 hover:border-accent/40 transition-colors">
                   <input
@@ -484,6 +492,12 @@ export function AlertChannels() {
                       )}
                       {ch.on_posture_drop && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 ring-1 ring-blue-400/20">posture</span>
+                      )}
+                      {ch.on_anomaly_critical && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-danger/10 text-danger ring-1 ring-danger/20">AI critical</span>
+                      )}
+                      {ch.on_anomaly_warning && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 ring-1 ring-amber-400/20">AI warning</span>
                       )}
                     </div>
                   </div>
