@@ -342,7 +342,7 @@ class ActivityMonitor @Inject constructor(
                         Timber.w("foreground poller: PACKAGE_USAGE_STATS not granted — prompting user via notification + auto-launching Settings")
                         postEvent("activity.permission.needed", mapOf(
                             "permission" to "PACKAGE_USAGE_STATS",
-                            "hint" to "Tap the notification on the device, or open Settings → Apps → Special access → Usage data access → CyberSentinel MDM. Required to capture per-app open/close events; cannot be auto-granted by Device Owner (signature-only)."
+                            "hint" to "Tap the notification on the device, or open Settings → Apps → Special access → Usage data access → SeceoKnight MDM. Required to capture per-app open/close events; cannot be auto-granted by Device Owner (signature-only)."
                         ))
                         showUsageStatsNotification()
                         runCatching { launchUsageStatsSettings() }
@@ -383,7 +383,7 @@ class ActivityMonitor @Inject constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
                 USAGE_NOTIF_CHANNEL,
-                "CyberSentinel — Permission needed",
+                "SeceoKnight — Permission needed",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Prompts to grant the one permission Device Owner can't auto-grant."
@@ -400,10 +400,10 @@ class ActivityMonitor @Inject constructor(
         val notif = NotificationCompat.Builder(context, USAGE_NOTIF_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("Grant Usage Access")
-            .setContentText("Tap to enable per-app activity logging for CyberSentinel MDM")
+            .setContentText("Tap to enable per-app activity logging for SeceoKnight MDM")
             .setStyle(NotificationCompat.BigTextStyle()
                 .bigText("Android requires Usage Access for tracking which apps users open. " +
-                         "Tap to open Settings → Usage data access → CyberSentinel MDM → Allow."))
+                         "Tap to open Settings → Usage data access → SeceoKnight MDM → Allow."))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pi)
             .setAutoCancel(true)

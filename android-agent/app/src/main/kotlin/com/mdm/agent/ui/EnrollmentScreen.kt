@@ -76,8 +76,8 @@ fun EnrollmentScreen(vm: MainViewModel) {
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Text("CyberSentinel MDM", style = MaterialTheme.typography.headlineSmall)
-        Text("Virtual Galaxy Infotech Ltd", style = MaterialTheme.typography.labelSmall)
+        Text("SeceoKnight MDM", style = MaterialTheme.typography.headlineSmall)
+        Text("SeceoKnight Technologies", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(20.dp))
         Text("Device enrollment", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))

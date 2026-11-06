@@ -54,8 +54,8 @@ fun HomeScreen(vm: MainViewModel) {
         else                    -> "Connecting…" to Color(0xFFF9A825)
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
-        Text("CyberSentinel MDM", style = MaterialTheme.typography.headlineSmall)
-        Text("Virtual Galaxy Infotech Ltd", style = MaterialTheme.typography.labelSmall)
+        Text("SeceoKnight MDM", style = MaterialTheme.typography.headlineSmall)
+        Text("SeceoKnight Technologies", style = MaterialTheme.typography.labelSmall)
         Spacer(Modifier.height(16.dp))
         Text("Device ID: ${ds?.deviceId ?: "—"}")
         Text("Status: $statusLabel", color = statusColor, style = MaterialTheme.typography.bodyMedium)
@@ -95,7 +95,7 @@ fun HomeScreen(vm: MainViewModel) {
         )
         Spacer(Modifier.height(20.dp))
         Text(
-            "This device is managed by CyberSentinel MDM. Policy and commands " +
+            "This device is managed by SeceoKnight MDM. Policy and commands " +
             "sync in the background.",
             style = MaterialTheme.typography.bodySmall
         )

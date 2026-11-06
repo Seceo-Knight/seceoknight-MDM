@@ -563,14 +563,14 @@ class CommandService : Service() {
         // making it read as a generic system service. (Android does not allow the
         // FGS notification to be removed entirely.)
         val stealth = runCatching { tokens.stealthEnabled() }.getOrDefault(false)
-        val channelName = if (stealth) "System service" else "CyberSentinel MDM"
-        val notifTitle  = if (stealth) "System service" else "CyberSentinel MDM"
-        val notifText   = if (stealth) "System services are running" else "Device managed by Virtual Galaxy Infotech Ltd"
+        val channelName = if (stealth) "System service" else "SeceoKnight MDM"
+        val notifTitle  = if (stealth) "System service" else "SeceoKnight MDM"
+        val notifText   = if (stealth) "System services are running" else "Device managed by SeceoKnight Technologies"
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(CHANNEL_ID, channelName,
                 NotificationManager.IMPORTANCE_MIN).apply {
-                description = if (stealth) "System services" else "Keeps CyberSentinel MDM connected"
+                description = if (stealth) "System services" else "Keeps SeceoKnight MDM connected"
                 setShowBadge(false)
             }
             nm.createNotificationChannel(ch)
