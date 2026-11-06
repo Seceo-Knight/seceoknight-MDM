@@ -18,6 +18,7 @@ import (
 	"github.com/mdm/shared/db"
 	"github.com/mdm/shared/logger"
 	"github.com/mdm/shared/middleware"
+	"github.com/mdm/telemetry-service/internal/anomaly"
 	"github.com/mdm/telemetry-service/internal/handlers"
 	"github.com/mdm/telemetry-service/internal/repository"
 )
@@ -40,7 +41,12 @@ func main() {
 
 	issuer := auth.NewIssuer(cfg.JWTSecret, cfg.JWTAccessTTL)
 	repo := repository.NewTelemetryRepo(pg)
-	h := handlers.New(repo)
+	anomalyStore := anomaly.NewStore(pg)
+	h := handlers.New(repo, anomalyStore)
+
+	// Start the AI anomaly detection engine (fires every 5 minutes).
+	engine := anomaly.New(anomalyStore, 5*time.Minute)
+	engine.Run(ctx)
 
 	app := fiber.New(fiber.Config{
 		AppName: "mdm-telemetry", DisableStartupMessage: true,
@@ -68,6 +74,17 @@ func main() {
 	app.Get("/api/v1/telemetry/devices/:deviceID/events",
 		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
 		h.Events)
+
+	// AI Anomaly Detection endpoints
+	app.Get("/api/v1/telemetry/anomalies",
+		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
+		h.ListAnomalies)
+	app.Get("/api/v1/telemetry/devices/:deviceID/anomalies",
+		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
+		h.ListDeviceAnomalies)
+	app.Post("/api/v1/telemetry/anomalies/:id/resolve",
+		middleware.JWTAuth(issuer), middleware.TenantScope(), middleware.RequirePermission(authz.PermTelemetryRead),
+		h.ResolveAnomaly)
 
 	go func() {
 		mux := http.NewServeMux()

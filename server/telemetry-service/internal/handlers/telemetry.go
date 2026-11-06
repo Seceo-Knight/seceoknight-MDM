@@ -9,12 +9,18 @@ import (
 
 	"github.com/mdm/shared/middleware"
 	"github.com/mdm/shared/models"
+	"github.com/mdm/telemetry-service/internal/anomaly"
 	"github.com/mdm/telemetry-service/internal/repository"
 )
 
-type Handler struct{ repo *repository.TelemetryRepo }
+type Handler struct {
+	repo         *repository.TelemetryRepo
+	anomalyStore *anomaly.Store
+}
 
-func New(r *repository.TelemetryRepo) *Handler { return &Handler{repo: r} }
+func New(r *repository.TelemetryRepo, as *anomaly.Store) *Handler {
+	return &Handler{repo: r, anomalyStore: as}
+}
 
 type ingestReq struct {
 	Events []struct {
@@ -94,4 +100,51 @@ func (h *Handler) Events(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(fiber.Map{"items": items})
+}
+
+// ─── Anomaly endpoints ────────────────────────────────────────────────────────
+
+// ListAnomalies returns all unresolved anomalies for the tenant.
+//   GET /api/v1/telemetry/anomalies?limit=200
+func (h *Handler) ListAnomalies(c *fiber.Ctx) error {
+	tenantStr, _ := c.Locals(middleware.CtxTenantID).(string)
+	tenantID, _ := uuid.Parse(tenantStr)
+	limit := c.QueryInt("limit", 200)
+	items, err := h.anomalyStore.ListAnomalies(c.Context(), tenantID, limit)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+// ListDeviceAnomalies returns anomalies for a specific device.
+//   GET /api/v1/telemetry/devices/:deviceID/anomalies?limit=100
+func (h *Handler) ListDeviceAnomalies(c *fiber.Ctx) error {
+	tenantStr, _ := c.Locals(middleware.CtxTenantID).(string)
+	tenantID, _ := uuid.Parse(tenantStr)
+	devID, err := uuid.Parse(c.Params("deviceID"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid device id"})
+	}
+	limit := c.QueryInt("limit", 100)
+	items, err := h.anomalyStore.ListDeviceAnomalies(c.Context(), tenantID, devID, limit)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+// ResolveAnomaly marks an anomaly as resolved.
+//   POST /api/v1/telemetry/anomalies/:id/resolve
+func (h *Handler) ResolveAnomaly(c *fiber.Ctx) error {
+	tenantStr, _ := c.Locals(middleware.CtxTenantID).(string)
+	tenantID, _ := uuid.Parse(tenantStr)
+	anomalyID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid anomaly id"})
+	}
+	if err := h.anomalyStore.ResolveAnomaly(c.Context(), tenantID, anomalyID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.SendStatus(204)
 }

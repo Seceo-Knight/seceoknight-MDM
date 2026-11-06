@@ -11,7 +11,8 @@ import { api } from '../api/client';
 import { DeviceMap } from '../components/DeviceMap';
 import { Stat, Panel, Badge, EmptyState, PageHero, HeroStat, Button, Hairline } from '../components/ui';
 import { Donut, MiniBars, chartColor } from '../components/charts';
-import { Smartphone, Wifi, ShieldCheck, Activity as ActivityIcon, Layers, Radio, MapPin, Gauge, Cpu, ShieldAlert, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Smartphone, Wifi, ShieldCheck, Activity as ActivityIcon, Layers, Radio, MapPin, Gauge, Cpu, ShieldAlert, TrendingUp, TrendingDown, Minus, Brain, AlertTriangle } from 'lucide-react';
+import { listAnomalies, type Anomaly, ANOMALY_META, SEVERITY_META } from '../api/anomalies';
 
 interface AuditRow { id: string; actor_kind: string; actor_id?: string; action: string; target_id?: string; metadata?: Record<string, unknown>; created_at: string }
 
@@ -24,6 +25,7 @@ export function Dashboard() {
   const { data: policies } = useQuery({ queryKey: ['policies'], queryFn: listPolicies });
   const { data: users } = useQuery({ queryKey: ['tenant-users'], queryFn: listUsers, retry: false, staleTime: 60_000 });
   const { data: geofences = [] } = useQuery({ queryKey: ['geofences'], queryFn: listGeofences, staleTime: 30_000 });
+  const { data: anomalies = [] } = useQuery({ queryKey: ['anomalies'], queryFn: () => listAnomalies(50), staleTime: 60_000, refetchInterval: 60_000 });
   const { data: audit } = useQuery({
     queryKey: ['audit', 'dashboard'],
     queryFn: async () => (await api.get<{ items: AuditRow[] }>('/api/v1/audit?limit=200')).data.items,
@@ -103,7 +105,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Security score ribbon — always visible, theme-aware threat-level indicator */}
-      {securityScore !== null && <SecurityRibbon score={securityScore} critical={posture.critical} atRisk={posture.atRisk} geofences={geofences.filter(g => g.enabled).length} />}
+      {securityScore !== null && <SecurityRibbon score={securityScore} critical={posture.critical} atRisk={posture.atRisk} geofences={geofences.filter(g => g.enabled).length} aiThreats={anomalies.filter(a => a.severity === 'critical').length} />}
 
       {/* Command-center hero */}
       <PageHero
@@ -255,6 +257,11 @@ export function Dashboard() {
         </Panel>
       </div>
 
+      {/* AI Anomaly widget — only shown when there are unresolved anomalies */}
+      {anomalies.length > 0 && (
+        <AnomalyWidget anomalies={anomalies} />
+      )}
+
       {/* Activity trend — hidden entirely when there's nothing in the window. */}
       {activity.total > 0 && (
       <Panel icon={ActivityIcon} title="Activity · last 24 hours"
@@ -353,7 +360,7 @@ function Legend({ color, label, value, capitalize }: { color: string; label: str
 }
 
 // ── Security Score ribbon ─────────────────────────────────────────────────────
-function SecurityRibbon({ score, critical, atRisk, geofences }: { score: number; critical: number; atRisk: number; geofences: number }) {
+function SecurityRibbon({ score, critical, atRisk, geofences, aiThreats }: { score: number; critical: number; atRisk: number; geofences: number; aiThreats: number }) {
   const level = score >= 80 ? 'good' : score >= 60 ? 'moderate' : score >= 40 ? 'elevated' : 'critical';
   const levelMeta = {
     good:     { label: 'Good',     bar: 'from-success to-emerald-400',  ring: 'ring-success/30', text: 'text-success',  bg: 'bg-success-soft' },
@@ -424,6 +431,13 @@ function SecurityRibbon({ score, critical, atRisk, geofences }: { score: number;
             <span className="text-muted">at risk</span>
           </div>
         )}
+        {aiThreats > 0 && (
+          <div className="flex items-center gap-1.5 text-sm">
+            <Brain size={12} className="text-danger shrink-0" />
+            <span className="text-danger font-semibold tabular-nums">{aiThreats}</span>
+            <span className="text-muted">AI threat{aiThreats !== 1 ? 's' : ''}</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 text-sm">
           <MapPin size={12} className="text-accent shrink-0" />
           <span className="font-semibold tabular-nums text-fg">{geofences}</span>
@@ -431,6 +445,71 @@ function SecurityRibbon({ score, critical, atRisk, geofences }: { score: number;
         </div>
       </div>
     </div>
+  );
+}
+
+// ── AI Anomaly dashboard widget ───────────────────────────────────────────────
+function AnomalyWidget({ anomalies }: { anomalies: Anomaly[] }) {
+  const critical = anomalies.filter(a => a.severity === 'critical');
+  const warning  = anomalies.filter(a => a.severity === 'warning');
+  const preview  = anomalies.slice(0, 5);
+
+  return (
+    <Panel
+      icon={Brain}
+      title="AI Threat Intelligence"
+      subtitle="Statistical Z-score anomaly detection"
+      actions={<Link to="/ai-insights" className="text-xs text-accent hover:underline">View all →</Link>}
+      className="relative overflow-hidden card-grad ring-1 ring-inset ring-danger/20 transition-[transform,box-shadow] duration-200 hover:shadow-md"
+    >
+      <Hairline />
+      {/* Summary strip */}
+      <div className="flex items-center gap-4 mb-4 flex-wrap">
+        {critical.length > 0 && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 bg-danger/10 ring-1 ring-inset ring-danger/20">
+            <AlertTriangle size={13} className="text-danger" />
+            <span className="text-sm font-bold tabular-nums text-danger">{critical.length}</span>
+            <span className="text-xs text-muted">critical</span>
+          </div>
+        )}
+        {warning.length > 0 && (
+          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 bg-warn/10 ring-1 ring-inset ring-warn/20">
+            <AlertTriangle size={13} className="text-warn" />
+            <span className="text-sm font-bold tabular-nums text-warn">{warning.length}</span>
+            <span className="text-xs text-muted">warnings</span>
+          </div>
+        )}
+        <span className="text-xs text-faint ml-auto">{anomalies.length} unresolved · engine runs every 5 min</span>
+      </div>
+      {/* Top anomalies preview */}
+      <div className="space-y-2">
+        {preview.map(a => {
+          const meta = ANOMALY_META[a.anomaly_type] ?? { label: a.anomaly_type, icon: '⚠️', color: '#64748b' };
+          const sev  = SEVERITY_META[a.severity];
+          return (
+            <div key={a.id} className="flex items-center gap-3 rounded-lg px-3 py-2 bg-surface-2/50 ring-1 ring-inset ring-line">
+              <span className="text-base">{meta.icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-fg truncate">{meta.label}</span>
+                  <span className="inline-flex items-center rounded-full px-1.5 py-px text-2xs font-semibold"
+                    style={{ color: sev.color, background: sev.bg }}>{sev.label}</span>
+                </div>
+                <p className="text-2xs text-muted truncate">{a.description}</p>
+              </div>
+              <span className="text-2xs font-mono tabular-nums" style={{ color: a.z_score >= 3 ? '#ef4444' : '#f59e0b' }}>
+                {a.z_score.toFixed(1)}σ
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {anomalies.length > 5 && (
+        <Link to="/ai-insights" className="mt-3 block text-center text-xs text-accent hover:underline">
+          +{anomalies.length - 5} more anomalies →
+        </Link>
+      )}
+    </Panel>
   );
 }
 
