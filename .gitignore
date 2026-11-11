@@ -18,6 +18,8 @@ android-agent/**/*.iml
 *.class
 *.keystore
 *.jks
+# Allow the debug signing keystore committed in the private repo as backup
+!android-agent/.signing/debug.keystore
 
 # NOTE: gradle/wrapper/gradle-wrapper.jar is intentionally committed — it must
 # be in the repo for `./gradlew` to work on a fresh clone and in CI.

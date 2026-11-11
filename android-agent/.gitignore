@@ -1,1 +1,2 @@
-.signing/
+# .signing/ is committed to this PRIVATE repo as the keystore backup.
+# Never push this repo public while this folder is tracked.
