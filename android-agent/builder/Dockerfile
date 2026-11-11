@@ -1,13 +1,13 @@
-# Slim Android builder image for CyberSentinel MDM.
+# Slim Android builder image for SeceoKnight MDM.
 #
-# Designed to fit comfortably on small dev boxes:
-#   final size ~1.3 GB vs ~10 GB for community "android-build-box" images.
+# Pinned to linux/amd64 so AAPT2 (an x86-64 binary) runs correctly on
+# Apple Silicon Macs via Rosetta emulation inside Docker Desktop.
 #
 # Layout:
 #   /opt/android-sdk        — Android SDK (cmdline-tools, platforms, build-tools)
 #   /root/.gradle           — mounted persistent volume for Gradle caches
 #   /project                — the android-agent source tree (bind mount)
-FROM eclipse-temurin:17-jdk-jammy
+FROM --platform=linux/amd64 eclipse-temurin:17-jdk-jammy
 
 ENV ANDROID_SDK_ROOT=/opt/android-sdk \
     ANDROID_HOME=/opt/android-sdk \

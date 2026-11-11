@@ -22,7 +22,7 @@ TASK="assemble${VARIANT_CAP}"   # assembleDebug / assembleRelease
 # Step 1: build the slim builder image if absent (or if the Dockerfile changed).
 if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
     echo "🧱  Building local Android builder image ($IMAGE_TAG)…"
-    docker build -t "$IMAGE_TAG" ./builder
+    docker build --platform linux/amd64 -t "$IMAGE_TAG" ./builder
 fi
 
 # Step 2: persistent Gradle cache so dependency downloads happen once.
@@ -40,7 +40,7 @@ SIGN_DIR="$PWD/.signing"
 if [ ! -f "$SIGN_DIR/debug.keystore" ]; then
     echo "🔑  Generating stable debug keystore (one-time) at .signing/debug.keystore…"
     mkdir -p "$SIGN_DIR"
-    docker run --rm -v "$SIGN_DIR:/ks" "$IMAGE_TAG" bash -lc "
+    docker run --rm --platform linux/amd64 -v "$SIGN_DIR:/ks" "$IMAGE_TAG" bash -lc "
         keytool -genkeypair -v -keystore /ks/debug.keystore \
           -storepass android -keypass android -alias androiddebugkey \
           -keyalg RSA -keysize 2048 -validity 10000 \
@@ -59,7 +59,7 @@ if [ -f "$VERF" ]; then
 fi
 
 echo "🛠  Building SeceoKnight MDM agent ($VARIANT)…"
-docker run --rm \
+docker run --rm --platform linux/amd64 \
   -v "$PWD:/project" \
   -v mdm-gradle-cache:/root/.gradle \
   -v "$SIGN_DIR:/root/.android" \
