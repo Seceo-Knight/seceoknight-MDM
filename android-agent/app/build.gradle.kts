@@ -43,8 +43,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false   // R8 OOM on 8 GB Mac — not needed for internal MDM
+            isShrinkResources = false // must be false when minify is false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug") // replace with real cert
         }
