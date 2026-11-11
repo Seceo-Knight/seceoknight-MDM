@@ -65,7 +65,7 @@ docker run --rm --platform linux/amd64 \
   -v "$SIGN_DIR:/root/.android" \
   -w /project \
   -e GRADLE_USER_HOME=/root/.gradle \
-  -e JAVA_TOOL_OPTIONS=-Xmx3g \
+  -e JAVA_TOOL_OPTIONS="-Xmx2g -XX:MaxMetaspaceSize=512m" \
   "$IMAGE_TAG" \
   bash -lc "
     set -e
