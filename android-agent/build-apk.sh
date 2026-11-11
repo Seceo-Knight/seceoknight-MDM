@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# build-apk.sh — builds the CyberSentinel MDM agent APK inside a slim
+# build-apk.sh — builds the SeceoKnight MDM agent APK inside a slim
 # containerised Android SDK + JDK 17. The host only needs Docker.
 #
 # Usage:
 #   ./build-apk.sh           # debug APK (default)
-#   ./build-apk.sh release   # unsigned release APK
+#   ./build-apk.sh release   # release APK
 #
 # First run builds the local builder image (~1.3 GB) and downloads Gradle
 # deps (~500 MB) — total ~5 min on a fast link. Subsequent runs reuse both
@@ -13,9 +13,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IMAGE_TAG="cybersentinel-android-builder:latest"
+IMAGE_TAG="seceoknight-android-builder:latest"
 VARIANT="${1:-debug}"
-TASK="assemble${VARIANT^}"   # assembleDebug / assembleRelease
+# Capitalise first letter without bash4 ${^} (works on macOS default bash3)
+VARIANT_CAP="$(echo "${VARIANT:0:1}" | tr '[:lower:]' '[:upper:]')${VARIANT:1}"
+TASK="assemble${VARIANT_CAP}"   # assembleDebug / assembleRelease
 
 # Step 1: build the slim builder image if absent (or if the Dockerfile changed).
 if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
@@ -56,7 +58,7 @@ if [ -f "$VERF" ]; then
     echo "🔢  Agent version → $(grep '^versionMajor=' "$VERF" | cut -d= -f2).$(grep '^versionMinor=' "$VERF" | cut -d= -f2).$next"
 fi
 
-echo "🛠  Building CyberSentinel MDM agent ($VARIANT)…"
+echo "🛠  Building SeceoKnight MDM agent ($VARIANT)…"
 docker run --rm \
   -v "$PWD:/project" \
   -v mdm-gradle-cache:/root/.gradle \
